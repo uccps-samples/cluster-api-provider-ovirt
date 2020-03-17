@@ -49,7 +49,23 @@ type OvirtMachineProviderSpec struct {
 	// the oVirt cluster this VM instance belongs too
 	ClusterId string `json:"cluster_id"`
 
+	// Sockets is the number of sockets for a VM.
+	// Total CPUs is Sockets * Cores * Threads
+	Sockets int32 `json:"sockets"`
 
+	// Cores is the number of cores per socket.
+	// Total CPUs is Sockets * Cores * Threads
+	Cores int32 `json:"cores"`
+
+	// Thread is the number of thread per core.
+	// Total CPUs is Sockets * Cores * Threads
+	Threads int32 `json:"threads"`
+
+	// MemoryInMib is the size of a VM's memory in MiBs.
+	MemoryInMib int32 `json:"memoryInMib"`
+
+	// DiskInGib defines the disk size of the VM in GiB.
+	DiskInGib int32 `json:"diskInGib"`
 }
 
 // +genclient

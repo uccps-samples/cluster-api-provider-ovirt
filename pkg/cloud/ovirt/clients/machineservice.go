@@ -180,11 +180,16 @@ func (is *InstanceService) handleDiskExtension(vmService *ovirtsdk.VmService, cr
 	}
 	// extend the disk if requested size is bigger than template. We won't support shrinking it.
 	newDiskSize := providerSpec.OSDisk.SizeGB * int64(math.Pow(2, 30))
-	if newDiskSize > bootableDiskAttachment.MustDisk().MustProvisionedSize() {
-		klog.Infof("Extending the OS disk from %d to %d",
-			bootableDiskAttachment.MustDisk().MustProvisionedSize(),
-			newDiskSize)
 
+	// get the disk
+	getDisk, err := vmService.Connection().SystemService().DisksService().DiskService(bootableDiskAttachment.MustId()).Get().Send()
+	if err != nil {
+		return err
+	}
+
+	size := getDisk.MustDisk().MustProvisionedSize()
+	if newDiskSize > size {
+		klog.Infof("Extending the OS disk from %d to %d", size, newDiskSize)
 		bootableDiskAttachment.
 			MustDisk().
 			SetProvisionedSize(newDiskSize)

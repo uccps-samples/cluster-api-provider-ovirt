@@ -7,6 +7,7 @@ require (
 	github.com/openshift/cluster-api v0.0.0-20191030113141-9a3a7bbe9258
 	github.com/ovirt/go-ovirt v0.0.0-20200428093010-9bcc4fd4e6c0
 	github.com/pkg/errors v0.8.1
+	github.com/sirupsen/logrus v1.4.2
 	k8s.io/api v0.0.0-20190918155943-95b840bb6a1f
 	k8s.io/apimachinery v0.0.0-20190913080033-27d36303b655
 	k8s.io/client-go v0.0.0-20190918160344-1fbdaa4c8d90

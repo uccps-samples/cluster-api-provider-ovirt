@@ -307,14 +307,14 @@ func (actuator *OvirtActuator) reconcileNetwork(machine *machinev1.Machine, inst
 
 func (actuator *OvirtActuator) reconcileProviderStatus(machine *machinev1.Machine, instance *clients.Instance, condition ovirtconfigv1.OvirtMachineProviderCondition) error {
 	status := string(instance.MustStatus())
-	name := instance.MustId()
+	id := instance.MustId()
 
 	providerStatus, err := ovirtconfigv1.ProviderStatusFromRawExtension(machine.Status.ProviderStatus)
 	if err != nil {
 		return err
 	}
 	providerStatus.InstanceState = &status
-	providerStatus.InstanceID = &name
+	providerStatus.InstanceID = &id
 	providerStatus.Conditions = actuator.reconcileConditions(providerStatus.Conditions, condition)
 	rawExtension, err := ovirtconfigv1.RawExtensionFromProviderStatus(providerStatus)
 	if err != nil {

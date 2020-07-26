@@ -50,7 +50,7 @@ func main() {
 
 	metricsAddr := flag.String(
 		"metrics-addr",
-		":8080",
+		":8081",
 		"The address the metric endpoint binds to.",
 	)
 

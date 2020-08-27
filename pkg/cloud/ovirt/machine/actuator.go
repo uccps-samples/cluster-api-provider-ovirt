@@ -246,6 +246,8 @@ func (actuator *OvirtActuator) handleMachineError(machine *machinev1.Machine, er
 
 func (actuator *OvirtActuator) patchMachine(machine *machinev1.Machine, instance *clients.Instance, condition ovirtconfigv1.OvirtMachineProviderCondition) error {
 	actuator.reconcileProviderID(machine, instance)
+	klog.V(5).Infof("Machine %s provider status %s", instance.MustName(), instance.MustStatus())
+
 	err := actuator.reconcileNetwork(machine, instance)
 	if err != nil {
 		return err
@@ -278,11 +280,20 @@ func (actuator *OvirtActuator) patchMachine(machine *machinev1.Machine, instance
 
 func (actuator *OvirtActuator) reconcileNetwork(machine *machinev1.Machine, instance *clients.Instance) error {
 	switch instance.MustStatus() {
-	// expect IP addresses only on those statues.
-	case ovirtsdk.VMSTATUS_UP, ovirtsdk.VMSTATUS_MIGRATING, ovirtsdk.VMSTATUS_POWERING_UP:
+	// expect IP addresses only on those statuses.
+	// in those statuses we 'll try reconciling
+	case ovirtsdk.VMSTATUS_UP, ovirtsdk.VMSTATUS_MIGRATING:
 		break
-	default:
+
+	// update machine status.
+	case ovirtsdk.VMSTATUS_DOWN:
 		return nil
+
+	// return error if vm is transient state this will force retry reconciling until VM is up.
+	// there is no event generated that will trigger this.  BZ1854787
+	default:
+		return fmt.Errorf("Aborting reconciliation while VM %s  state is %s", instance.MustName(), instance.MustStatus())
+
 	}
 	name := instance.MustName()
 	addresses := []corev1.NodeAddress{{Address: name, Type: corev1.NodeInternalDNS}}
@@ -295,6 +306,7 @@ func (actuator *OvirtActuator) reconcileNetwork(machine *machinev1.Machine, inst
 		klog.Errorf("failed to lookup the VM IP %s - skip setting addresses for this machine", err)
 		return err
 	} else {
+		klog.V(5).Infof("resolved IP address %v from DNS", ips)
 		for _, ip := range ips {
 			if ip.To4() != nil {
 				addresses = append(addresses, corev1.NodeAddress{Type: corev1.NodeInternalIP, Address: ip.String()})

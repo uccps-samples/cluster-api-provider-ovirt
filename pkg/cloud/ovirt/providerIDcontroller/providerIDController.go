@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
+	"github.com/openshift/cluster-api-provider-ovirt/pkg/cloud/ovirt"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/cloud/ovirt/clients"
 )
 
@@ -57,7 +58,7 @@ func (r *providerIDReconciler) Reconcile(request reconcile.Request) (reconcile.R
 		return reconcile.Result{}, fmt.Errorf("failed getting VM from oVirt: %v", err)
 	}
 
-	node.Spec.ProviderID = fmt.Sprintf("ovirt://%s", id)
+	node.Spec.ProviderID = ovirt.ProviderIDPrefix + id
 	err = r.client.Update(context.Background(), &node)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("failed updating node %s: %v", node.Name, err)

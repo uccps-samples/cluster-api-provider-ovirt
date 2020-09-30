@@ -338,7 +338,8 @@ func (actuator *OvirtActuator) reconcileProviderStatus(machine *machinev1.Machin
 
 func (actuator *OvirtActuator) reconcileProviderID(machine *machinev1.Machine, instance *clients.Instance) {
 	id := instance.MustId()
-	machine.Spec.ProviderID = &id
+	providerID := ovirt.ProviderIDPrefix + id
+	machine.Spec.ProviderID = &providerID
 
 	if machine.ObjectMeta.Annotations == nil {
 		machine.ObjectMeta.Annotations = make(map[string]string)

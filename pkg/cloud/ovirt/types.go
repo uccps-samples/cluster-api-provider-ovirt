@@ -26,6 +26,7 @@ import (
 
 const (
 	OvirtIdAnnotationKey = "VmId"
+	ProviderIDPrefix     = "ovirt://"
 )
 
 // ActuatorParams holds parameter information for Actuator

@@ -3,3 +3,5 @@ approvers:
   - bennyz
   - Gal-Zaidman
   - eslutsky
+component: "Cloud Compute"
+subcomponent: "oVirt Provider"

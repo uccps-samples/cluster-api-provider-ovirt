@@ -32,7 +32,7 @@ type providerIDReconciler struct {
 }
 
 func (r *providerIDReconciler) Reconcile(request reconcile.Request) (reconcile.Result, error) {
-	r.log.V(3).Info("Reconciling", "node", request.NamespacedName)
+	r.log.Info("Reconciling", "Node", request.NamespacedName)
 
 	// Fetch the Node instance
 	node := corev1.Node{}
@@ -47,23 +47,30 @@ func (r *providerIDReconciler) Reconcile(request reconcile.Request) (reconcile.R
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, fmt.Errorf("error getting node: %v", err)
 	}
-
-	if node.Spec.ProviderID != "" {
-		return reconcile.Result{}, nil
-	}
-
-	r.log.Info("spec.ProviderID is empty, fetching from ovirt", "node", request.NamespacedName)
 	id, err := r.fetchProviderIDFunc(node.Name)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("failed getting VM from oVirt: %v", err)
 	}
-
-	node.Spec.ProviderID = ovirt.ProviderIDPrefix + id
-	err = r.client.Update(context.Background(), &node)
-	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("failed updating node %s: %v", node.Name, err)
+	if node.Spec.ProviderID != "" {
+		if id == "" {
+			// Node doesn't exist in oVirt platform, deleting node
+			r.log.Info(
+				"Deleting Node from cluster since it has been removed from the oVirt engine",
+				"node",request.NamespacedName)
+			if err := r.client.Delete(context.Background(), &node); err != nil {
+				r.log.Error(err, "Error deleting node: %v", "VM name", node.Name)
+			}
+		}
+		return reconcile.Result{}, nil
+	}else {
+		r.log.Info("spec.ProviderID is empty, fetching from ovirt", "node", request.NamespacedName)
+		node.Spec.ProviderID = ovirt.ProviderIDPrefix + id
+		err = r.client.Update(context.Background(), &node)
+		if err != nil {
+			return reconcile.Result{}, fmt.Errorf("failed updating node %s: %v", node.Name, err)
+		}
+		return reconcile.Result{}, nil
 	}
-	return reconcile.Result{}, nil
 }
 
 func (r *providerIDReconciler) fetchOvirtVmID(nodeName string) (string, error) {
@@ -73,12 +80,14 @@ func (r *providerIDReconciler) fetchOvirtVmID(nodeName string) (string, error) {
 	}
 	send, err := c.SystemService().VmsService().List().Search(fmt.Sprintf("name=%s", nodeName)).Send()
 	if err != nil {
-		r.log.Error(err, "Failed to find VM", "VM name", nodeName)
+		r.log.Error(err, "Error occurred will searching VM", "VM name", nodeName)
 		return "", err
 	}
 	vms := send.MustVms().Slice()
-	if len(vms) != 1 {
-		return "", fmt.Errorf("expected to get 1 VM but got %v", len(vms))
+	if l := len(vms); l > 1 {
+		return "", fmt.Errorf("expected to get 1 VM but got %v", l)
+	} else if l == 0 {
+		return "", nil
 	}
 	return vms[0].MustId(), nil
 }

@@ -132,12 +132,16 @@ func (is *InstanceService) InstanceCreate(
 		return nil, err
 	}
 
-	err = is.Connection.WaitForVM(response.MustVm().MustId(), ovirtsdk.VMSTATUS_DOWN, time.Minute)
+	vmID := response.MustVm().MustId()
+
+	ovirtClusterID := machine.Labels["machine.openshift.io/cluster-api-cluster"]
+
+	err = is.Connection.WaitForVM(vmID, ovirtsdk.VMSTATUS_DOWN, time.Minute)
 	if err != nil {
 		return nil, errors.Wrap(err, "Timed out waiting for the VM creation to finish")
 	}
 
-	vmService := is.Connection.SystemService().VmsService().VmService(response.MustVm().MustId())
+	vmService := is.Connection.SystemService().VmsService().VmService(vmID)
 
 	if providerSpec.OSDisk != nil {
 		err = is.handleDiskExtension(vmService, response, providerSpec)
@@ -148,18 +152,25 @@ func (is *InstanceService) InstanceCreate(
 
 	err = is.handleNics(vmService, providerSpec)
 	if err != nil {
-		return nil, errors.Wrapf(err, "failed handling nics creation for VM %s", vm.MustName())
+		return nil, errors.Wrapf(err, "Failed handling nics creation for VM %s", vm.MustName())
 	}
 
 	_, err = is.Connection.SystemService().VmsService().
 		VmService(response.MustVm().MustId()).
 		TagsService().Add().
-		Tag(ovirtsdk.NewTagBuilder().Name(machine.Labels["machine.openshift.io/cluster-api-cluster"]).MustBuild()).
+		Tag(ovirtsdk.NewTagBuilder().Name(ovirtClusterID).MustBuild()).
 		Send()
 	if err != nil {
 		klog.Errorf("Failed to add tag to VM, skipping", err)
 	}
 
+	err = is.handleAffinityGroups(
+		response.MustVm(),
+		providerSpec.ClusterId,
+		providerSpec.AffinityGroupsNames)
+	if err != nil {
+		return nil, err
+	}
 	return &Instance{response.MustVm()}, nil
 }
 
@@ -324,7 +335,7 @@ func (is *InstanceService) handleNics(vmService *ovirtsdk.VmService, spec *ovirt
 }
 
 //Find virtual machine IP Address by ID
-func  (is *InstanceService) FindVirtualMachineIP(id string,excludeAddr map[string]int) (string, error) {
+func (is *InstanceService) FindVirtualMachineIP(id string, excludeAddr map[string]int) (string, error) {
 
 	vmService := is.Connection.SystemService().VmsService().VmService(id)
 
@@ -344,7 +355,7 @@ func  (is *InstanceService) FindVirtualMachineIP(id string,excludeAddr map[strin
 	for _, reportedDevice := range reportedDeviceSlice.Slice() {
 		nicName, _ := reportedDevice.Name()
 		if !nicRegex.MatchString(nicName) {
-			klog.Infof("ovirt vm id: %s ,  skipped nic %s , naming regex mismatch",id, nicName)
+			klog.Infof("ovirt vm id: %s ,  skipped nic %s , naming regex mismatch", id, nicName)
 			continue
 		}
 
@@ -360,10 +371,53 @@ func  (is *InstanceService) FindVirtualMachineIP(id string,excludeAddr map[strin
 
 				if hasAddress {
 					klog.Infof("ovirt vm id: %s , found usable IP %s", id, ipres)
-					return ipres,nil
+					return ipres, nil
 				}
 			}
 		}
 	}
 	return "", fmt.Errorf("coudlnt find usable IP address for vm id: %s", id)
+}
+
+func (is *InstanceService) getAffinityGroups(cID string, agNames []string) (ag []*ovirtsdk.AffinityGroup, err error) {
+	var ags []*ovirtsdk.AffinityGroup
+	res, err := is.Connection.SystemService().ClustersService().
+		ClusterService(cID).AffinityGroupsService().
+		List().Send()
+	if err != nil {
+		return nil, err
+	}
+	agNamesMap := make(map[string]*ovirtsdk.AffinityGroup)
+	for _, af := range res.MustGroups().Slice() {
+		agNamesMap[af.MustName()] = af
+	}
+	for _, agName := range agNames {
+		if _, ok := agNamesMap[agName]; ok {
+			ags = append(ags, agNamesMap[agName])
+		}
+	}
+	return ags, nil
+}
+
+func (is *InstanceService) handleAffinityGroups(vm *ovirtsdk.Vm, cID string, agsName []string) error {
+	ags, err := is.getAffinityGroups(cID, agsName)
+	if err != nil {
+		return err
+	}
+	agService := is.Connection.SystemService().ClustersService().
+		ClusterService(cID).AffinityGroupsService()
+	for _, ag := range ags {
+		klog.Infof("Adding machine %v to affinity group %v", vm.MustName(), ag.MustName())
+		_, err = agService.GroupService(ag.MustId()).VmsService().Add().Vm(vm).Send()
+
+		// TODO: bug 1932320: Remove error handling workaround when BZ#1931932 is resolved and backported
+		if err != nil && !errors.As(err, &ovirtsdk.XMLTagNotMatchError{}) {
+			return errors.Errorf(
+				"Failed to add VM %s to AffinityGroup %s, error: %v",
+				vm.MustName(),
+				ag.MustName(),
+				err)
+		}
+	}
+	return nil
 }

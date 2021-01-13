@@ -3,6 +3,7 @@ package providerIDcontroller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/go-logr/logr"
 	ovirtsdk "github.com/ovirt/go-ovirt"
@@ -19,6 +20,12 @@ import (
 
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/cloud/ovirt"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/cloud/ovirt/clients"
+)
+
+const (
+	RETRY_INTERVAL_VM_DOWN = 60 * time.Second
+	NAMESPACE              = "openshift-machine-api"
+	CREDENTIALS_SECRET     = "ovirt-credentials"
 )
 
 var _ reconcile.Reconciler = &providerIDReconciler{}
@@ -65,8 +72,18 @@ func (r *providerIDReconciler) Reconcile(request reconcile.Request) (reconcile.R
 		if err != nil {
 			return reconcile.Result{}, fmt.Errorf("failed updating node %s: %v", node.Name, err)
 		}
-		return reconcile.Result{}, nil
 	}
+	c, err := r.getConnection(NAMESPACE, CREDENTIALS_SECRET)
+	vmResponse, err := c.SystemService().VmsService().VmService(id).Get().Send()
+	if err != nil {
+		return reconcile.Result{}, fmt.Errorf("failed getting VM from oVirt: %v", err)
+	}
+	if vmResponse.MustVm().MustStatus() == ovirtsdk.VMSTATUS_DOWN {
+		r.log.Info("Node VM status is Down, requeuing for 1 min",
+			"Node", node.Name, "Vm Status", ovirtsdk.VMSTATUS_DOWN)
+		return reconcile.Result{Requeue: true, RequeueAfter: RETRY_INTERVAL_VM_DOWN}, nil
+	}
+	return reconcile.Result{}, nil
 }
 
 func deleteNode(client client.Client, node *corev1.Node) (reconcile.Result, error) {
@@ -77,7 +94,7 @@ func deleteNode(client client.Client, node *corev1.Node) (reconcile.Result, erro
 }
 
 func (r *providerIDReconciler) fetchOvirtVmID(nodeName string) (string, error) {
-	c, err := r.getConnection("openshift-machine-api", "ovirt-credentials")
+	c, err := r.getConnection(NAMESPACE, CREDENTIALS_SECRET)
 	if err != nil {
 		return "", err
 	}

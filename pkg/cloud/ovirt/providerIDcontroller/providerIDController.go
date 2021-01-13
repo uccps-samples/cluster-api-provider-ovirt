@@ -51,18 +51,14 @@ func (r *providerIDReconciler) Reconcile(request reconcile.Request) (reconcile.R
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("failed getting VM from oVirt: %v", err)
 	}
-	if node.Spec.ProviderID != "" {
-		if id == "" {
-			// Node doesn't exist in oVirt platform, deleting node
-			r.log.Info(
-				"Deleting Node from cluster since it has been removed from the oVirt engine",
-				"node", request.NamespacedName)
-			if err := r.client.Delete(context.Background(), &node); err != nil {
-				return reconcile.Result{}, fmt.Errorf("Error deleting node: %v, error is: %v", node.Name, err)
-			}
-		}
-		return reconcile.Result{}, nil
-	} else {
+	if id == "" {
+		// Node doesn't exist in oVirt platform, deleting node object
+		r.log.Info(
+			"Deleting Node from cluster since it has been removed from the oVirt engine",
+			"node", request.NamespacedName)
+		return deleteNode(r.client, &node)
+	}
+	if node.Spec.ProviderID == "" {
 		r.log.Info("spec.ProviderID is empty, fetching from ovirt", "node", request.NamespacedName)
 		node.Spec.ProviderID = ovirt.ProviderIDPrefix + id
 		err = r.client.Update(context.Background(), &node)
@@ -71,6 +67,13 @@ func (r *providerIDReconciler) Reconcile(request reconcile.Request) (reconcile.R
 		}
 		return reconcile.Result{}, nil
 	}
+}
+
+func deleteNode(client client.Client, node *corev1.Node) (reconcile.Result, error) {
+	if err := client.Delete(context.Background(), node); err != nil {
+		return reconcile.Result{}, fmt.Errorf("Error deleting node: %v, error is: %v", node.Name, err)
+	}
+	return reconcile.Result{}, nil
 }
 
 func (r *providerIDReconciler) fetchOvirtVmID(nodeName string) (string, error) {

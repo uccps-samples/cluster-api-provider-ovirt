@@ -134,6 +134,7 @@ func (actuator *OvirtActuator) Create(_ context.Context, machine *machinev1.Mach
 }
 
 func (actuator *OvirtActuator) Exists(_ context.Context, machine *machinev1.Machine) (bool, error) {
+	klog.Infof("Checking machine %v exists.\n", machine.Name)
 	providerSpec, err := ovirtconfigv1.ProviderSpecFromRawExtension(machine.Spec.ProviderSpec.Value)
 	if err != nil {
 		return false, actuator.handleMachineError(machine, apierrors.InvalidMachineConfiguration(

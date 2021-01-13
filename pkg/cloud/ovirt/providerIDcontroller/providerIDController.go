@@ -56,13 +56,13 @@ func (r *providerIDReconciler) Reconcile(request reconcile.Request) (reconcile.R
 			// Node doesn't exist in oVirt platform, deleting node
 			r.log.Info(
 				"Deleting Node from cluster since it has been removed from the oVirt engine",
-				"node",request.NamespacedName)
+				"node", request.NamespacedName)
 			if err := r.client.Delete(context.Background(), &node); err != nil {
-				r.log.Error(err, "Error deleting node: %v", "VM name", node.Name)
+				return reconcile.Result{}, fmt.Errorf("Error deleting node: %v, error is: %v", node.Name, err)
 			}
 		}
 		return reconcile.Result{}, nil
-	}else {
+	} else {
 		r.log.Info("spec.ProviderID is empty, fetching from ovirt", "node", request.NamespacedName)
 		node.Spec.ProviderID = ovirt.ProviderIDPrefix + id
 		err = r.client.Update(context.Background(), &node)

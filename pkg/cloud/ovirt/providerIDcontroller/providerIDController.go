@@ -3,6 +3,8 @@ package providerIDcontroller
 import (
 	"context"
 	"fmt"
+	"github.com/openshift/cluster-api-provider-ovirt/pkg/cloud/ovirt"
+	"time"
 
 	"github.com/go-logr/logr"
 	ovirtsdk "github.com/ovirt/go-ovirt"
@@ -17,8 +19,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	"github.com/openshift/cluster-api-provider-ovirt/pkg/cloud/ovirt"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/cloud/ovirt/clients"
+)
+
+const (
+	RETRY_INTERVAL_VM_DOWN = 60 * time.Second
+	NAMESPACE              = "openshift-machine-api"
+	CREDENTIALS_SECRET     = "ovirt-credentials"
 )
 
 var _ reconcile.Reconciler = &providerIDReconciler{}
@@ -51,30 +58,45 @@ func (r *providerIDReconciler) Reconcile(request reconcile.Request) (reconcile.R
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("failed getting VM from oVirt: %v", err)
 	}
+	if id == "" {
+		// Node doesn't exist in oVirt platform, deleting node object
+		r.log.Info(
+			"Deleting Node from cluster since it has been removed from the oVirt engine",
+			"node", request.NamespacedName)
+		return deleteNode(r.client, &node)
+	}
 	if node.Spec.ProviderID != "" {
-		if id == "" {
-			// Node doesn't exist in oVirt platform, deleting node
-			r.log.Info(
-				"Deleting Node from cluster since it has been removed from the oVirt engine",
-				"node",request.NamespacedName)
-			if err := r.client.Delete(context.Background(), &node); err != nil {
-				r.log.Error(err, "Error deleting node: %v", "VM name", node.Name)
-			}
+		// Node exist and providerID is set
+		c, err := r.getConnection(NAMESPACE, CREDENTIALS_SECRET)
+		vmResponse, err := c.SystemService().VmsService().VmService(id).Get().Send()
+		if err != nil {
+			return reconcile.Result{}, fmt.Errorf("failed getting VM from oVirt: %v", err)
 		}
-		return reconcile.Result{}, nil
-	}else {
+		if vmResponse.MustVm().MustStatus() == ovirtsdk.VMSTATUS_DOWN {
+			r.log.Info("Node VM status is Down, requeuing for 1 min",
+				"Node", node.Name, "Vm Status", ovirtsdk.VMSTATUS_DOWN)
+			return reconcile.Result{Requeue: true, RequeueAfter: RETRY_INTERVAL_VM_DOWN}, nil
+		}
+	} else {
 		r.log.Info("spec.ProviderID is empty, fetching from ovirt", "node", request.NamespacedName)
 		node.Spec.ProviderID = ovirt.ProviderIDPrefix + id
 		err = r.client.Update(context.Background(), &node)
 		if err != nil {
 			return reconcile.Result{}, fmt.Errorf("failed updating node %s: %v", node.Name, err)
 		}
-		return reconcile.Result{}, nil
 	}
+	return reconcile.Result{}, nil
+}
+
+func deleteNode(client client.Client, node *corev1.Node) (reconcile.Result, error) {
+	if err := client.Delete(context.Background(), node); err != nil {
+		return reconcile.Result{}, fmt.Errorf("Error deleting node: %v, error is: %v", node.Name, err)
+	}
+	return reconcile.Result{}, nil
 }
 
 func (r *providerIDReconciler) fetchOvirtVmID(nodeName string) (string, error) {
-	c, err := r.getConnection("openshift-machine-api", "ovirt-credentials")
+	c, err := r.getConnection(NAMESPACE, CREDENTIALS_SECRET)
 	if err != nil {
 		return "", err
 	}

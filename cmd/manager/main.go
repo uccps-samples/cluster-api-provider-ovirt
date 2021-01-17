@@ -46,6 +46,7 @@ var (
 	leaseDuration = 120 * time.Second
 	renewDeadline = 110 * time.Second
 	retryPeriod   = 20 * time.Second
+	syncPeriod    = 10 * time.Minute
 )
 
 func main() {
@@ -104,8 +105,9 @@ func main() {
 		LeaderElectionNamespace: *leaderElectResourceNamespace,
 		LeaderElectionID:        "cluster-api-provider-ovirt-leader",
 		LeaseDuration:           leaderElectLeaseDuration,
-		MetricsBindAddress:      *metricsAddr,
 		HealthProbeBindAddress:  *healthAddr,
+		SyncPeriod:              &syncPeriod,
+		MetricsBindAddress:      *metricsAddr,
 		// Slow the default retry and renew election rate to reduce etcd writes at idle: BZ 1858400
 		RetryPeriod:   &retryPeriod,
 		RenewDeadline: &renewDeadline,

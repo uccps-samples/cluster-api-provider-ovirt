@@ -3,6 +3,7 @@ package providerIDcontroller
 import (
 	"context"
 	"fmt"
+	"github.com/openshift/cluster-api-provider-ovirt/pkg/cloud/ovirt"
 	"time"
 
 	"github.com/go-logr/logr"
@@ -18,7 +19,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
 
-	"github.com/openshift/cluster-api-provider-ovirt/pkg/cloud/ovirt"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/cloud/ovirt/clients"
 )
 
@@ -65,23 +65,25 @@ func (r *providerIDReconciler) Reconcile(request reconcile.Request) (reconcile.R
 			"node", request.NamespacedName)
 		return deleteNode(r.client, &node)
 	}
-	if node.Spec.ProviderID == "" {
+	if node.Spec.ProviderID != "" {
+		// Node exist and providerID is set
+		c, err := r.getConnection(NAMESPACE, CREDENTIALS_SECRET)
+		vmResponse, err := c.SystemService().VmsService().VmService(id).Get().Send()
+		if err != nil {
+			return reconcile.Result{}, fmt.Errorf("failed getting VM from oVirt: %v", err)
+		}
+		if vmResponse.MustVm().MustStatus() == ovirtsdk.VMSTATUS_DOWN {
+			r.log.Info("Node VM status is Down, requeuing for 1 min",
+				"Node", node.Name, "Vm Status", ovirtsdk.VMSTATUS_DOWN)
+			return reconcile.Result{Requeue: true, RequeueAfter: RETRY_INTERVAL_VM_DOWN}, nil
+		}
+	} else {
 		r.log.Info("spec.ProviderID is empty, fetching from ovirt", "node", request.NamespacedName)
 		node.Spec.ProviderID = ovirt.ProviderIDPrefix + id
 		err = r.client.Update(context.Background(), &node)
 		if err != nil {
 			return reconcile.Result{}, fmt.Errorf("failed updating node %s: %v", node.Name, err)
 		}
-	}
-	c, err := r.getConnection(NAMESPACE, CREDENTIALS_SECRET)
-	vmResponse, err := c.SystemService().VmsService().VmService(id).Get().Send()
-	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("failed getting VM from oVirt: %v", err)
-	}
-	if vmResponse.MustVm().MustStatus() == ovirtsdk.VMSTATUS_DOWN {
-		r.log.Info("Node VM status is Down, requeuing for 1 min",
-			"Node", node.Name, "Vm Status", ovirtsdk.VMSTATUS_DOWN)
-		return reconcile.Result{Requeue: true, RequeueAfter: RETRY_INTERVAL_VM_DOWN}, nil
 	}
 	return reconcile.Result{}, nil
 }

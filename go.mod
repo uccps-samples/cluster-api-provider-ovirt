@@ -3,16 +3,15 @@ module github.com/openshift/cluster-api-provider-ovirt
 go 1.13
 
 require (
-	github.com/go-logr/logr v0.2.1
-	github.com/go-logr/zapr v0.2.0 // indirect
-	github.com/openshift/machine-api-operator v0.2.1-0.20201111151924-77300d0c997a
+	github.com/go-logr/logr v0.3.0
+	github.com/openshift/machine-api-operator v0.2.1-0.20210104142355-8e6ae0acdfcf
 	github.com/ovirt/go-ovirt v0.0.0-20210112072624-e4d3b104de71
 	github.com/pkg/errors v0.9.1
-	k8s.io/api v0.19.0
-	k8s.io/apimachinery v0.19.0
-	k8s.io/client-go v0.19.0
+	k8s.io/api v0.20.0
+	k8s.io/apimachinery v0.20.0
+	k8s.io/client-go v0.20.0
 	k8s.io/klog v1.0.0
-	sigs.k8s.io/controller-runtime v0.6.2
+	sigs.k8s.io/controller-runtime v0.7.0
 	sigs.k8s.io/controller-tools v0.3.0
 	sigs.k8s.io/yaml v1.2.0
 )

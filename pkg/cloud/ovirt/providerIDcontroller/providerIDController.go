@@ -38,12 +38,12 @@ type providerIDReconciler struct {
 	ovirtApi             *ovirtsdk.Connection
 }
 
-func (r *providerIDReconciler) Reconcile(request reconcile.Request) (reconcile.Result, error) {
+func (r *providerIDReconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	r.log.Info("Reconciling", "Node", request.NamespacedName)
 
 	// Fetch the Node instance
 	node := corev1.Node{}
-	err := r.client.Get(context.Background(), request.NamespacedName, &node)
+	err := r.client.Get(ctx, request.NamespacedName, &node)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -63,7 +63,7 @@ func (r *providerIDReconciler) Reconcile(request reconcile.Request) (reconcile.R
 		r.log.Info(
 			"Deleting Node from cluster since it has been removed from the oVirt engine",
 			"node", request.NamespacedName)
-		return deleteNode(r.client, &node)
+		return deleteNode(ctx, r.client, &node)
 	}
 	if node.Spec.ProviderID != "" {
 		// Node exist and providerID is set
@@ -80,7 +80,7 @@ func (r *providerIDReconciler) Reconcile(request reconcile.Request) (reconcile.R
 	} else {
 		r.log.Info("spec.ProviderID is empty, fetching from ovirt", "node", request.NamespacedName)
 		node.Spec.ProviderID = ovirt.ProviderIDPrefix + id
-		err = r.client.Update(context.Background(), &node)
+		err = r.client.Update(ctx, &node)
 		if err != nil {
 			return reconcile.Result{}, fmt.Errorf("failed updating node %s: %v", node.Name, err)
 		}
@@ -88,8 +88,8 @@ func (r *providerIDReconciler) Reconcile(request reconcile.Request) (reconcile.R
 	return reconcile.Result{}, nil
 }
 
-func deleteNode(client client.Client, node *corev1.Node) (reconcile.Result, error) {
-	if err := client.Delete(context.Background(), node); err != nil {
+func deleteNode(ctx context.Context, client client.Client, node *corev1.Node) (reconcile.Result, error) {
+	if err := client.Delete(ctx, node); err != nil {
 		return reconcile.Result{}, fmt.Errorf("Error deleting node: %v, error is: %v", node.Name, err)
 	}
 	return reconcile.Result{}, nil

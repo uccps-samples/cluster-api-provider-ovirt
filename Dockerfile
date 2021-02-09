@@ -10,7 +10,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM registry.svc.ci.openshift.org/openshift/release:golang-1.13 AS builder
+FROM registry.ci.openshift.org/openshift/release:golang-1.15 AS builder
 
 ARG version 
 ARG release 
@@ -21,7 +21,7 @@ LABEL   com.redhat.component="machine-api" \
         release="$release" \
         architecture="x86_64" \
         summary="cluster-api-provider-ovirt" \
-        maintainer="Roy Golan <rgolan@redhat.com>"
+        maintainer="OCP RHV Team <ocprhvteam@redhat.com>"
 
 WORKDIR /go/cluster-api-provider-ovirt
 COPY . .
@@ -30,6 +30,6 @@ COPY . .
 RUN git --version 
 RUN make build
 
-FROM registry.svc.ci.openshift.org/openshift/origin-v4.0:base
+FROM registry.ci.openshift.org/openshift/origin-v4.0:base
 
 COPY --from=builder /go/cluster-api-provider-ovirt/bin/machine-controller-manager /

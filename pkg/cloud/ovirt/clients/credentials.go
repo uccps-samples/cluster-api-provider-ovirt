@@ -45,9 +45,10 @@ func GetCredentialsSecret(coreClient client.Client, namespace string, secretName
 	o.Password = string(credentialsSecret.Data["ovirt_password"])
 	o.CAFile = string(credentialsSecret.Data["ovirt_cafile"])
 	insecure, err := strconv.ParseBool(string(credentialsSecret.Data["ovirt_insecure"]))
-	if err == nil {
-		o.Insecure = insecure
+	if err != nil {
+		return nil, fmt.Errorf("failed to identify ovirt_insecure in credentials %v", err)
 	}
+	o.Insecure = insecure
 	o.CABundle = string(credentialsSecret.Data["ovirt_ca_bundle"])
 
 	// write CA bundle to a file if exist.

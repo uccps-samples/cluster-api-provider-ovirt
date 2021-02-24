@@ -9,6 +9,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"regexp"
 	"time"
 
 	"github.com/pkg/errors"
@@ -320,4 +321,49 @@ func (is *InstanceService) handleNics(vmService *ovirtsdk.VmService, spec *ovirt
 		}
 	}
 	return nil
+}
+
+//Find virtual machine IP Address by ID
+func  (is *InstanceService) FindVirtualMachineIP(id string,excludeAddr map[string]int) (string, error) {
+
+	vmService := is.Connection.SystemService().VmsService().VmService(id)
+
+	// Get the guest reported devices
+	reportedDeviceResp, err := vmService.ReportedDevicesService().List().Send()
+	if err != nil {
+		return "", fmt.Errorf("failed to get reported devices list, reason: %v", err)
+	}
+	reportedDeviceSlice, _ := reportedDeviceResp.ReportedDevice()
+
+	if len(reportedDeviceSlice.Slice()) == 0 {
+		return "", fmt.Errorf("cannot find NICs for vmId: %s", id)
+	}
+
+	var nicRegex = regexp.MustCompile(`^(eth|en).*`)
+
+	for _, reportedDevice := range reportedDeviceSlice.Slice() {
+		nicName, _ := reportedDevice.Name()
+		if !nicRegex.MatchString(nicName) {
+			klog.Infof("ovirt vm id: %s ,  skipped nic %s , naming regex mismatch",id, nicName)
+			continue
+		}
+
+		ips, hasIps := reportedDevice.Ips()
+		if hasIps {
+			for _, ip := range ips.Slice() {
+				ipres, hasAddress := ip.Address()
+
+				if _, ok := excludeAddr[ipres]; ok {
+					klog.Infof("address %s is excluded from usable IPs", ipres)
+					continue
+				}
+
+				if hasAddress {
+					klog.Infof("ovirt vm id: %s , found usable IP %s", id, ipres)
+					return ipres,nil
+				}
+			}
+		}
+	}
+	return "", fmt.Errorf("coudlnt find usable IP address for vm id: %s", id)
 }

@@ -122,7 +122,7 @@ func (is *InstanceService) InstanceCreate(
 
 	vm, err := vmBuilder.Build()
 	if err != nil {
-		return nil, errors.Wrap(err, "Failed to construct VM struct")
+		return nil, errors.Wrap(err, "failed to construct VM struct")
 	}
 
 	klog.Infof("creating VM: %v", vm.MustName())
@@ -138,7 +138,7 @@ func (is *InstanceService) InstanceCreate(
 
 	err = is.Connection.WaitForVM(vmID, ovirtsdk.VMSTATUS_DOWN, time.Minute)
 	if err != nil {
-		return nil, errors.Wrap(err, "Timed out waiting for the VM creation to finish")
+		return nil, errors.Wrap(err, "timed out waiting for the VM creation to finish")
 	}
 
 	vmService := is.Connection.SystemService().VmsService().VmService(vmID)
@@ -152,7 +152,7 @@ func (is *InstanceService) InstanceCreate(
 
 	err = is.handleNics(vmService, providerSpec)
 	if err != nil {
-		return nil, errors.Wrapf(err, "Failed handling nics creation for VM %s", vm.MustName())
+		return nil, errors.Wrapf(err, "failed handling nics creation for VM %s", vm.MustName())
 	}
 
 	_, err = is.Connection.SystemService().VmsService().
@@ -274,7 +274,7 @@ func (is *InstanceService) GetVm(machine machinev1.Machine) (instance *Instance,
 func (is *InstanceService) GetVmByID(resourceId string) (instance *Instance, err error) {
 	klog.Infof("Fetching VM by ID: %s", resourceId)
 	if resourceId == "" {
-		return nil, fmt.Errorf("ResourceId should be specified to get detail")
+		return nil, fmt.Errorf("resourceId should be specified to get detail")
 	}
 	response, err := is.Connection.SystemService().VmsService().VmService(resourceId).Get().Send()
 	if err != nil {
@@ -362,16 +362,16 @@ func (is *InstanceService) FindVirtualMachineIP(id string, excludeAddr map[strin
 		ips, hasIps := reportedDevice.Ips()
 		if hasIps {
 			for _, ip := range ips.Slice() {
-				ipres, hasAddress := ip.Address()
+				ipAddress, hasAddress := ip.Address()
 
-				if _, ok := excludeAddr[ipres]; ok {
-					klog.Infof("address %s is excluded from usable IPs", ipres)
+				if _, ok := excludeAddr[ipAddress]; ok {
+					klog.Infof("ipAddress %s is excluded from usable IPs", ipAddress)
 					continue
 				}
 
 				if hasAddress {
-					klog.Infof("ovirt vm id: %s , found usable IP %s", id, ipres)
-					return ipres, nil
+					klog.Infof("ovirt vm id: %s , found usable IP %s", id, ipAddress)
+					return ipAddress, nil
 				}
 			}
 		}
@@ -392,13 +392,15 @@ func (is *InstanceService) getAffinityGroups(cID string, agNames []string) (ag [
 		agNamesMap[af.MustName()] = af
 	}
 	for _, agName := range agNames {
-		if _, ok := agNamesMap[agName]; ok {
-			ags = append(ags, agNamesMap[agName])
+		if _, ok := agNamesMap[agName]; !ok {
+			return nil, errors.Errorf("affinity group %v was not found on cluster %v", agName, cID)
 		}
+		ags = append(ags, agNamesMap[agName])
 	}
 	return ags, nil
 }
 
+// handleAffinityGroups adds the VM to the provided affinity groups
 func (is *InstanceService) handleAffinityGroups(vm *ovirtsdk.Vm, cID string, agsName []string) error {
 	ags, err := is.getAffinityGroups(cID, agsName)
 	if err != nil {
@@ -411,9 +413,9 @@ func (is *InstanceService) handleAffinityGroups(vm *ovirtsdk.Vm, cID string, ags
 		_, err = agService.GroupService(ag.MustId()).VmsService().Add().Vm(vm).Send()
 
 		// TODO: bug 1932320: Remove error handling workaround when BZ#1931932 is resolved and backported
-		if err != nil && !errors.As(err, &ovirtsdk.XMLTagNotMatchError{}) {
+		if err != nil && !errors.Is(err, ovirtsdk.XMLTagNotMatchError{"action", "vm"}) {
 			return errors.Errorf(
-				"Failed to add VM %s to AffinityGroup %s, error: %v",
+				"failed to add VM %s to AffinityGroup %s, error: %v",
 				vm.MustName(),
 				ag.MustName(),
 				err)

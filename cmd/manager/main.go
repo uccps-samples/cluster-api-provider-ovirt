@@ -36,9 +36,9 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	logz "sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	logf "sigs.k8s.io/controller-runtime/pkg/runtime/log"
-	"sigs.k8s.io/controller-runtime/pkg/runtime/signals"
+	"sigs.k8s.io/controller-runtime/pkg/manager/signals"
 )
 
 // The default durations for the leader election operations.
@@ -89,9 +89,8 @@ func main() {
 	)
 
 	flag.Parse()
+	log := logz.New().WithName("ovirt-controller-manager")
 
-	log := logf.Log.WithName("ovirt-controller-manager")
-	logf.SetLogger(logf.ZapLogger(false))
 	entryLog := log.WithName("entrypoint")
 
 	cfg := config.GetConfigOrDie()

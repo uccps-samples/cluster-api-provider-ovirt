@@ -4,9 +4,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/cloud/ovirt"
-	"time"
-
-	"github.com/go-logr/logr"
+	common "github.com/openshift/cluster-api-provider-ovirt/pkg/cloud/ovirt/controllers"
 	ovirtsdk "github.com/ovirt/go-ovirt"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -18,32 +16,22 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
-
-	"github.com/openshift/cluster-api-provider-ovirt/pkg/cloud/ovirt/clients"
-)
-
-const (
-	RETRY_INTERVAL_VM_DOWN = 60 * time.Second
-	NAMESPACE              = "openshift-machine-api"
-	CREDENTIALS_SECRET     = "ovirt-credentials"
 )
 
 var _ reconcile.Reconciler = &providerIDReconciler{}
 
 type providerIDReconciler struct {
-	log                  logr.Logger
-	client               client.Client
+	common.BaseController
 	listNodesByFieldFunc func(key, value string) ([]corev1.Node, error)
 	fetchProviderIDFunc  func(string) (string, error)
-	ovirtApi             *ovirtsdk.Connection
 }
 
 func (r *providerIDReconciler) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	r.log.Info("Reconciling", "Node", request.NamespacedName)
+	r.Log.Info("Reconciling", "Node", request.NamespacedName)
 
 	// Fetch the Node instance
 	node := corev1.Node{}
-	err := r.client.Get(ctx, request.NamespacedName, &node)
+	err := r.Client.Get(ctx, request.NamespacedName, &node)
 	if err != nil {
 		if errors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
@@ -60,27 +48,27 @@ func (r *providerIDReconciler) Reconcile(ctx context.Context, request reconcile.
 	}
 	if id == "" {
 		// Node doesn't exist in oVirt platform, deleting node object
-		r.log.Info(
+		r.Log.Info(
 			"Deleting Node from cluster since it has been removed from the oVirt engine",
 			"node", request.NamespacedName)
-		return deleteNode(ctx, r.client, &node)
+		return deleteNode(ctx, r.Client, &node)
 	}
 	if node.Spec.ProviderID != "" {
 		// Node exist and providerID is set
-		c, err := r.getConnection(NAMESPACE, CREDENTIALS_SECRET)
+		c, err := r.GetConnection(common.NAMESPACE, common.CREDENTIALS_SECRET)
 		vmResponse, err := c.SystemService().VmsService().VmService(id).Get().Send()
 		if err != nil {
 			return reconcile.Result{}, fmt.Errorf("failed getting VM from oVirt: %v", err)
 		}
 		if vmResponse.MustVm().MustStatus() == ovirtsdk.VMSTATUS_DOWN {
-			r.log.Info("Node VM status is Down, requeuing for 1 min",
+			r.Log.Info("Node VM status is Down, requeuing for 1 min",
 				"Node", node.Name, "Vm Status", ovirtsdk.VMSTATUS_DOWN)
-			return reconcile.Result{Requeue: true, RequeueAfter: RETRY_INTERVAL_VM_DOWN}, nil
+			return reconcile.Result{Requeue: true, RequeueAfter: common.RETRY_INTERVAL_VM_DOWN}, nil
 		}
 	} else {
-		r.log.Info("spec.ProviderID is empty, fetching from ovirt", "node", request.NamespacedName)
+		r.Log.Info("spec.ProviderID is empty, fetching from ovirt", "node", request.NamespacedName)
 		node.Spec.ProviderID = ovirt.ProviderIDPrefix + id
-		err = r.client.Update(ctx, &node)
+		err = r.Client.Update(ctx, &node)
 		if err != nil {
 			return reconcile.Result{}, fmt.Errorf("failed updating node %s: %v", node.Name, err)
 		}
@@ -96,13 +84,13 @@ func deleteNode(ctx context.Context, client client.Client, node *corev1.Node) (r
 }
 
 func (r *providerIDReconciler) fetchOvirtVmID(nodeName string) (string, error) {
-	c, err := r.getConnection(NAMESPACE, CREDENTIALS_SECRET)
+	c, err := r.GetConnection(common.NAMESPACE, common.CREDENTIALS_SECRET)
 	if err != nil {
 		return "", err
 	}
 	send, err := c.SystemService().VmsService().List().Search(fmt.Sprintf("name=%s", nodeName)).Send()
 	if err != nil {
-		r.log.Error(err, "Error occurred will searching VM", "VM name", nodeName)
+		r.Log.Error(err, "Error occurred will searching VM", "VM name", nodeName)
 		return "", err
 	}
 	vms := send.MustVms().Slice()
@@ -138,40 +126,11 @@ func Add(mgr manager.Manager, opts manager.Options) error {
 func NewProviderIDReconciler(mgr manager.Manager) (*providerIDReconciler, error) {
 	log.SetLogger(klogr.New())
 	r := providerIDReconciler{
-		log:    log.Log.WithName("controllers").WithName("providerID-reconciler"),
-		client: mgr.GetClient(),
+		BaseController: common.BaseController{
+			Log:    log.Log.WithName("controllers").WithName("providerID-reconciler"),
+			Client: mgr.GetClient(),
+		},
 	}
 	r.fetchProviderIDFunc = r.fetchOvirtVmID
 	return &r, nil
-}
-
-func (r *providerIDReconciler) getConnection(namespace, secretName string) (*ovirtsdk.Connection, error) {
-	var err error
-	if r.ovirtApi == nil || r.ovirtApi.Test() != nil {
-		// session expired or some other error, re-login.
-		r.ovirtApi, err = createApiConnection(r.client, namespace, secretName)
-	}
-	return r.ovirtApi, err
-}
-
-//createApiConnection returns a a client to oVirt's API endpoint
-func createApiConnection(client client.Client, namespace string, secretName string) (*ovirtsdk.Connection, error) {
-	creds, err := clients.GetCredentialsSecret(client, namespace, secretName)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed getting credentials for namespace %s, %s", namespace, err)
-	}
-
-	connection, err := ovirtsdk.NewConnectionBuilder().
-		URL(creds.URL).
-		Username(creds.Username).
-		Password(creds.Password).
-		CAFile(creds.CAFile).
-		Insecure(creds.Insecure).
-		Build()
-	if err != nil {
-		return nil, err
-	}
-
-	return connection, nil
 }

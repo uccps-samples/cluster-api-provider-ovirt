@@ -35,6 +35,7 @@ const (
 	TimeoutInstanceCreate       = 5 * time.Minute
 	RetryIntervalInstanceStatus = 10 * time.Second
 	InstanceStatusAnnotationKey = "machine.openshift.io/instance-state"
+	ErrorInvalidMachineObject   = "error validating machine object fields"
 )
 
 type OvirtActuator struct {
@@ -93,7 +94,7 @@ func (actuator *OvirtActuator) Create(_ context.Context, machine *machinev1.Mach
 	instance, err = machineService.InstanceCreate(machine, providerSpec, actuator.KubeClient)
 	if err != nil {
 		return actuator.handleMachineError(machine, apierrors.CreateMachine(
-			"error creating Ovirt instance: %v", err))
+			"creating Ovirt instance: %v", err))
 	}
 
 	// Wait till ready
@@ -376,7 +377,81 @@ func (actuator *OvirtActuator) reconcileConditions(
 	return conditions
 }
 
+// validateMachine validates the machine object yaml fields and
+// returns InvalidMachineConfiguration in case the validation failed
 func (actuator *OvirtActuator) validateMachine(machine *machinev1.Machine, config *ovirtconfigv1.OvirtMachineProviderSpec) *apierrors.MachineError {
+
+	// UserDataSecret
+	if config.UserDataSecret == nil {
+		return apierrors.InvalidMachineConfiguration(
+			fmt.Sprintf("%s UserDataSecret must be provided!", ErrorInvalidMachineObject))
+	} else if config.UserDataSecret.Name == "" {
+		return apierrors.InvalidMachineConfiguration(
+			fmt.Sprintf("%s UserDataSecret *Name* must be provided!", ErrorInvalidMachineObject))
+	}
+
+	err := validateInstanceID(config)
+	if err != nil {
+		return err
+	}
+
+	// CredentialsSecret
+	if config.CredentialsSecret == nil {
+		return apierrors.InvalidMachineConfiguration(
+			fmt.Sprintf("%s CredentialsSecret must be provided!", ErrorInvalidMachineObject))
+	} else if config.CredentialsSecret.Name == "" {
+		return apierrors.InvalidMachineConfiguration(
+			fmt.Sprintf("%s CredentialsSecret *Name* must be provided!", ErrorInvalidMachineObject))
+	}
+
+	// root disk of the node
+	if config.OSDisk == nil {
+		return apierrors.InvalidMachineConfiguration(
+			fmt.Sprintf("%s OS Disk (os_disk) must be specified!", ErrorInvalidMachineObject))
+	}
+
+	return validateVirtualMachineType(config.VMType)
+}
+
+// validateInstanceID execute validations regarding the InstanceID.
+// Returns: nil or InvalidMachineConfiguration
+func validateInstanceID(config *ovirtconfigv1.OvirtMachineProviderSpec) *apierrors.MachineError {
+	// Cannot set InstanceTypeID and at same time: MemoryMB OR CPU
+	if len(config.InstanceTypeId) != 0 {
+		if config.MemoryMB != 0 || config.CPU != nil {
+			return apierrors.InvalidMachineConfiguration(
+				fmt.Sprintf("%s InstanceTypeID and MemoryMB OR CPU cannot be set at the same time!", ErrorInvalidMachineObject))
+		}
+	} else {
+		if config.MemoryMB == 0 {
+			return apierrors.InvalidMachineConfiguration(
+				fmt.Sprintf("%s MemoryMB must be specified!", ErrorInvalidMachineObject))
+		}
+		if config.CPU == nil {
+			return apierrors.InvalidMachineConfiguration(
+				fmt.Sprintf("%s CPU must be specified!", ErrorInvalidMachineObject))
+		}
+	}
+	return nil
+}
+
+// validateVirtualMachineType execute validations regarding the
+// Virtual Machine type (desktop, server, high_performance).
+// Returns: nil or InvalidMachineConfiguration
+func validateVirtualMachineType(vmtype string) *apierrors.MachineError {
+	if len(vmtype) == 0 {
+		return apierrors.InvalidMachineConfiguration("VMType (keyword: type in YAML) must be specified")
+	}
+
+	switch vmtype {
+	case "server", "high_performance", "desktop":
+		return nil
+	default:
+		return apierrors.InvalidMachineConfiguration(
+			"error creating oVirt instance: The machine type must "+
+				"be one of the following options: "+
+				"server, high_performance or desktop. The value: %s is not valid", vmtype)
+	}
 	return nil
 }
 

@@ -3,7 +3,6 @@ package ovirt
 import (
 	"fmt"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/cloud/ovirt/clients"
-	"time"
 
 	"github.com/go-logr/logr"
 	ovirtsdk "github.com/ovirt/go-ovirt"
@@ -11,9 +10,8 @@ import (
 )
 
 const (
-	RETRY_INTERVAL_VM_DOWN = 60 * time.Second
-	NAMESPACE              = "openshift-machine-api"
-	CREDENTIALS_SECRET     = "ovirt-credentials"
+	NAMESPACE          = "openshift-machine-api"
+	CREDENTIALS_SECRET = "ovirt-credentials"
 )
 
 type BaseController struct {

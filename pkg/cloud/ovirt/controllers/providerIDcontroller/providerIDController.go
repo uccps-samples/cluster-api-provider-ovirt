@@ -40,11 +40,15 @@ func (r *providerIDController) Reconcile(ctx context.Context, request reconcile.
 		return reconcile.Result{}, fmt.Errorf("error getting node: %v", err)
 	}
 	if node.Spec.ProviderID == "" {
+		r.Log.Info("Node spec.ProviderID is empty, fetching from ovirt", "node", node.Name)
 		id, err := r.fetchOvirtVmID(node.Name)
 		if err != nil {
 			return reconcile.Result{}, fmt.Errorf("failed getting VM from oVirt: %v", err)
 		}
-		r.Log.Info("spec.ProviderID is empty, fetching from ovirt", "node", request.NamespacedName)
+		if id == "" {
+			r.Log.Info("Node not found in oVirt", "node", node.Name)
+			return reconcile.Result{}, nil
+		}
 		node.Spec.ProviderID = ovirt.ProviderIDPrefix + id
 		err = r.Client.Update(ctx, &node)
 		if err != nil {

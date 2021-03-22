@@ -440,7 +440,18 @@ func (actuator *OvirtActuator) validateMachine(machine *machinev1.Machine, confi
 			fmt.Sprintf("%s OS Disk (os_disk) must be specified!", ErrorInvalidMachineObject))
 	}
 
-	return validateVirtualMachineType(config.VMType)
+	err = validateVirtualMachineType(config.VMType)
+	if err != nil {
+		return err
+	}
+
+	if config.AutoPinningPolicy != "" {
+		err := actuator.autoPinningSupported(machine, config)
+		if err != nil {
+			return apierrors.InvalidMachineConfiguration(fmt.Sprintf("%s", err))
+		}
+	}
+	return nil
 }
 
 // validateInstanceID execute validations regarding the InstanceID.
@@ -483,6 +494,80 @@ func validateVirtualMachineType(vmtype string) *apierrors.MachineError {
 				"server, high_performance or desktop. The value: %s is not valid", vmtype)
 	}
 	return nil
+}
+
+// getEngineVersion will return the engine version we are using
+func (actuator *OvirtActuator) getEngineVersion(machine *machinev1.Machine, config *ovirtconfigv1.OvirtMachineProviderSpec) (*ovirtsdk.Version, error) {
+	connection, err := actuator.getConnection(machine.Namespace, config.CredentialsSecret.Name)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create connection to oVirt API")
+	}
+	return connection.SystemService().Get().MustSend().MustApi().MustProductInfo().MustVersion(), nil
+}
+
+// autoPinningSupported will check if the engine's version is relevant for the feature.
+func (actuator *OvirtActuator) autoPinningSupported(machine *machinev1.Machine, config *ovirtconfigv1.OvirtMachineProviderSpec) error {
+	err := validateAutPinningPolicyValue(config.AutoPinningPolicy)
+	if err != nil {
+		return err
+	}
+	// TODO: remove the version check when everyone uses engine 4.4.5
+	engineVer, err := actuator.getEngineVersion(machine, config)
+	if err != nil {
+		return err
+	}
+	autoPiningRequiredEngineVersion := ovirtsdk.NewVersionBuilder().
+		Major(4).
+		Minor(4).
+		Build_(5).
+		Revision(0).
+		MustBuild()
+	versionCompareResult, err := versionCompare(engineVer, autoPiningRequiredEngineVersion)
+	if err != nil {
+		return err
+	}
+	// The version is OK.
+	if versionCompareResult >= 0 {
+		return nil
+	}
+	return fmt.Errorf("the engine version %d.%d.%d is not supporting the auto pinning feature. " +
+		"Please update to 4.4.5 or later", engineVer.MustMajor(), engineVer.MustMinor(), engineVer.MustBuild())
+}
+
+// validateAutPinningPolicyValue execute validations regarding the
+// Virtual Machine auto pinning policy (disabled, existing, adjust).
+// Returns: nil or error
+func validateAutPinningPolicyValue(autopinningpolicy string) error {
+	switch autopinningpolicy {
+	case "disabled", "existing", "adjust":
+		return nil
+	default:
+		return fmt.Errorf(
+			"error creating oVirt instance: The machine auto pinning policy must "+
+				"be one of the following options: "+
+				"disabled, existing or adjust. The value: %s is not valid", autopinningpolicy)
+	}
+}
+
+// versionCompare will take two *ovirtsdk.Version and compare the two
+func versionCompare(v *ovirtsdk.Version, other *ovirtsdk.Version) (int64, error) {
+	if v == nil || other == nil {
+		return 5, fmt.Errorf("can't compare nil objects")
+	}
+	if v == other {
+		return 0, nil
+	}
+	result := v.MustMajor() - other.MustMajor()
+	if result == 0 {
+		result = v.MustMinor() - other.MustMinor()
+		if result == 0 {
+			result = v.MustBuild() - other.MustBuild()
+			if result == 0 {
+				result = v.MustRevision() - other.MustRevision()
+			}
+		}
+	}
+	return result, nil
 }
 
 //createApiConnection returns a a client to oVirt's API endpoint

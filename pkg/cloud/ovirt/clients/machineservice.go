@@ -120,6 +120,27 @@ func (is *InstanceService) InstanceCreate(
 		}
 	}
 
+	isAutoPinning := false
+	if providerSpec.AutoPinningPolicy != "" {
+		autoPinningPolicy := ovirtsdk.AutoPinningPolicy(providerSpec.AutoPinningPolicy)
+
+		// if we have a policy, we need to set the pinning to all the hosts in the cluster.
+		if autoPinningPolicy != ovirtsdk.AUTOPINNINGPOLICY_DISABLED {
+			isAutoPinning = true
+			hostsInCluster, err := is.getHostsInCluster(providerSpec.ClusterId)
+			if err != nil {
+				return nil, err
+			}
+			placementPolicyBuilder := ovirtsdk.NewVmPlacementPolicyBuilder()
+			placementPolicy, err := placementPolicyBuilder.Hosts(hostsInCluster).
+				Affinity(ovirtsdk.VMAFFINITY_MIGRATABLE).Build()
+			if err != nil {
+				return nil, fmt.Errorf("failed to build the placement policy of the vm: %v", err)
+			}
+			vmBuilder.PlacementPolicy(placementPolicy)
+		}
+	}
+
 	vm, err := vmBuilder.Build()
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to construct VM struct")
@@ -153,6 +174,13 @@ func (is *InstanceService) InstanceCreate(
 	err = is.handleNics(vmService, providerSpec)
 	if err != nil {
 		return nil, errors.Wrapf(err, "failed handling nics creation for VM %s", vm.MustName())
+	}
+
+	if isAutoPinning {
+		err = is.handleAutoPinning(vmID, ovirtsdk.AutoPinningPolicy(providerSpec.AutoPinningPolicy))
+		if err != nil {
+			klog.Errorf("updating the VM (%s) with auto pinning policy failed! %v", vmID, err)
+		}
 	}
 
 	_, err = is.Connection.SystemService().VmsService().
@@ -420,6 +448,33 @@ func (is *InstanceService) handleAffinityGroups(vm *ovirtsdk.Vm, cID string, ags
 				ag.MustName(),
 				err)
 		}
+	}
+	return nil
+}
+
+// getHostsInCluster will return a HostSlice of the hosts in a given cluster ID.
+func (is *InstanceService) getHostsInCluster(clusterId string) (*ovirtsdk.HostSlice, error) {
+	clusterService := is.Connection.SystemService().ClustersService().ClusterService(clusterId)
+	clusterGet, err := clusterService.Get().Send()
+	if err != nil {
+		return nil, errors.Errorf("failed to get the cluster: %v", err)
+	}
+	clusterName := clusterGet.MustCluster().MustName()
+	hostsInCluster, err := is.Connection.SystemService().HostsService().List().Search(
+		fmt.Sprintf("cluster=%s", clusterName)).Send()
+	if err != nil {
+		return nil, errors.Errorf("failed to get the list of hosts in the cluster: %v", err)
+	}
+	return hostsInCluster.MustHosts(), nil
+}
+
+// handleAutoPinning updates the VM after creation to set the auto pinning policy configuration.
+func (is *InstanceService) handleAutoPinning(id string, autoPinningPolicy ovirtsdk.AutoPinningPolicy) error {
+	vmService := is.Connection.SystemService().VmsService().VmService(id)
+	optimizeCpuSettings := autoPinningPolicy == ovirtsdk.AUTOPINNINGPOLICY_ADJUST
+	_, err := vmService.AutoPinCpuAndNumaNodes().OptimizeCpuSettings(optimizeCpuSettings).Send()
+	if err != nil {
+		return errors.Errorf("failed to set the auto pinning policy on the VM!, %v", err)
 	}
 	return nil
 }

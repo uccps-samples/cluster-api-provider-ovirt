@@ -8,7 +8,7 @@ package machine
 import (
 	"context"
 	"fmt"
-	"net"
+	"k8s.io/client-go/rest"
 	"time"
 
 	machinev1 "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
@@ -23,12 +23,14 @@ import (
 	"k8s.io/client-go/tools/record"
 	"k8s.io/klog"
 
+	osclientset "github.com/openshift/client-go/config/clientset/versioned"
 	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/cloud/ovirt"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/cloud/ovirt/clients"
 	ovirtsdk "github.com/ovirt/go-ovirt"
 
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	ctrl "sigs.k8s.io/controller-runtime"
 )
 
 const (
@@ -45,9 +47,15 @@ type OvirtActuator struct {
 	machinesClient v1beta1.MachineV1beta1Interface
 	EventRecorder  record.EventRecorder
 	ovirtApi       *ovirtsdk.Connection
+	OSClient       osclientset.Interface
 }
 
+
+
 func NewActuator(params ovirt.ActuatorParams) (*OvirtActuator, error) {
+	config := ctrl.GetConfigOrDie()
+	osClient := osclientset.NewForConfigOrDie(rest.AddUserAgent(config, "cluster-api-provider-ovirt"))
+
 	return &OvirtActuator{
 		params:         params,
 		client:         params.Client,
@@ -56,10 +64,11 @@ func NewActuator(params ovirt.ActuatorParams) (*OvirtActuator, error) {
 		KubeClient:     params.KubeClient,
 		EventRecorder:  params.EventRecorder,
 		ovirtApi:       nil,
+		OSClient:       osClient,
 	}, nil
 }
 
-func (actuator *OvirtActuator) Create(_ context.Context, machine *machinev1.Machine) error {
+func (actuator *OvirtActuator) Create(ctx context.Context, machine *machinev1.Machine) error {
 	providerSpec, err := ovirtconfigv1.ProviderSpecFromRawExtension(machine.Spec.ProviderSpec.Value)
 	if err != nil {
 		return actuator.handleMachineError(machine, apierrors.InvalidMachineConfiguration(
@@ -130,7 +139,7 @@ func (actuator *OvirtActuator) Create(_ context.Context, machine *machinev1.Mach
 	}
 
 	actuator.EventRecorder.Eventf(machine, corev1.EventTypeNormal, "Created", "Updated Machine %v", machine.Name)
-	return actuator.patchMachine(machine, instance, conditionSuccess())
+	return actuator.patchMachine(ctx,machine, instance, conditionSuccess())
 }
 
 func (actuator *OvirtActuator) Exists(_ context.Context, machine *machinev1.Machine) (bool, error) {
@@ -157,7 +166,7 @@ func (actuator *OvirtActuator) Exists(_ context.Context, machine *machinev1.Mach
 	return vm != nil, err
 }
 
-func (actuator *OvirtActuator) Update(_ context.Context, machine *machinev1.Machine) error {
+func (actuator *OvirtActuator) Update(ctx context.Context, machine *machinev1.Machine) error {
 	// eager update
 	providerSpec, err := ovirtconfigv1.ProviderSpecFromRawExtension(machine.Spec.ProviderSpec.Value)
 	if err != nil {
@@ -189,7 +198,7 @@ func (actuator *OvirtActuator) Update(_ context.Context, machine *machinev1.Mach
 				"Cannot find a VM by id: %v", err))
 		}
 	}
-	return actuator.patchMachine(machine, vm, conditionSuccess())
+	return actuator.patchMachine(ctx,machine, vm, conditionSuccess())
 }
 
 func (actuator *OvirtActuator) Delete(_ context.Context, machine *machinev1.Machine) error {
@@ -245,11 +254,11 @@ func (actuator *OvirtActuator) handleMachineError(machine *machinev1.Machine, er
 	return err
 }
 
-func (actuator *OvirtActuator) patchMachine(machine *machinev1.Machine, instance *clients.Instance, condition ovirtconfigv1.OvirtMachineProviderCondition) error {
+func (actuator *OvirtActuator) patchMachine(ctx context.Context,machine *machinev1.Machine, instance *clients.Instance, condition ovirtconfigv1.OvirtMachineProviderCondition) error {
 	actuator.reconcileProviderID(machine, instance)
 	klog.V(5).Infof("Machine %s provider status %s", instance.MustName(), instance.MustStatus())
 
-	err := actuator.reconcileNetwork(machine, instance)
+	err := actuator.reconcileNetwork(ctx,machine, instance)
 	if err != nil {
 		return err
 	}
@@ -279,7 +288,21 @@ func (actuator *OvirtActuator) patchMachine(machine *machinev1.Machine, instance
 	return nil
 }
 
-func (actuator *OvirtActuator) reconcileNetwork(machine *machinev1.Machine, instance *clients.Instance) error {
+func (actuator *OvirtActuator) getClusterAddress(ctx context.Context) (map[string]int,error){
+		infra,err := actuator.OSClient.ConfigV1().Infrastructures().Get(ctx,"cluster",metav1.GetOptions{})
+		if err != nil {
+			klog.Error(err, "Failed to retrieve Cluster details")
+			return nil,err
+		}
+
+		var clusterAddr = make(map[string]int)
+		clusterAddr[ infra.Status.PlatformStatus.Ovirt.APIServerInternalIP ] = 1
+		clusterAddr[ infra.Status.PlatformStatus.Ovirt.IngressIP ] = 1
+
+		return clusterAddr,nil
+	}
+
+func (actuator *OvirtActuator) reconcileNetwork(ctx context.Context,machine *machinev1.Machine, instance *clients.Instance) error {
 	switch instance.MustStatus() {
 	// expect IP addresses only on those statuses.
 	// in those statuses we 'll try reconciling
@@ -298,21 +321,28 @@ func (actuator *OvirtActuator) reconcileNetwork(machine *machinev1.Machine, inst
 	}
 	name := instance.MustName()
 	addresses := []corev1.NodeAddress{{Address: name, Type: corev1.NodeInternalDNS}}
-	// TODO rgolan - RHCOS QEMU guest agent isn't available yet - https://bugzilla.redhat.com/show_bug.cgi?id=1764804
-	// Till we have one we must get the IPs from the worker by trying to resolve it by its name.
-	klog.V(5).Infof("using hostname %s to resolve addresses", name)
-	ips, err := net.LookupIP(name)
+	machineService, err := clients.NewInstanceServiceFromMachine(machine, actuator.ovirtApi)
+	if err != nil {
+		return err
+	}
+	vmId := instance.MustId()
+	klog.V(5).Infof("using oVirt SDK to find % IP addresses", name)
+
+	//get API and ingress addresses that will be excluded from the node address selection
+	excludeAddr, err := actuator.getClusterAddress(ctx)
+	if err != nil {
+		return err
+	}
+
+	ip, err := machineService.FindVirtualMachineIP(vmId,excludeAddr)
+
 	if err != nil {
 		// stop reconciliation till we get IP addresses - otherwise the state will be considered stable.
 		klog.Errorf("failed to lookup the VM IP %s - skip setting addresses for this machine", err)
 		return err
 	} else {
-		klog.V(5).Infof("resolved IP address %v from DNS", ips)
-		for _, ip := range ips {
-			if ip.To4() != nil {
-				addresses = append(addresses, corev1.NodeAddress{Type: corev1.NodeInternalIP, Address: ip.String()})
-			}
-		}
+		klog.V(5).Infof("received IP address %v from engine", ip)
+		addresses = append(addresses, corev1.NodeAddress{Type: corev1.NodeInternalIP, Address: ip})
 	}
 	machine.Status.Addresses = addresses
 	return nil

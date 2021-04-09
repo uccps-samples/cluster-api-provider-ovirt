@@ -33,6 +33,7 @@ github.com/ghodss/yaml
 ## explicit
 github.com/go-logr/logr
 # github.com/go-logr/zapr v0.2.0
+## explicit
 github.com/go-logr/zapr
 # github.com/go-openapi/jsonpointer v0.19.3
 github.com/go-openapi/jsonpointer
@@ -108,6 +109,7 @@ github.com/modern-go/reflect2
 # github.com/openshift/api v0.0.0-20201216151826-78a19e96f9eb
 github.com/openshift/api/config/v1
 # github.com/openshift/client-go v0.0.0-20201214125552-e615e336eb49
+## explicit
 github.com/openshift/client-go/config/clientset/versioned
 github.com/openshift/client-go/config/clientset/versioned/scheme
 github.com/openshift/client-go/config/clientset/versioned/typed/config/v1

@@ -81,6 +81,10 @@ type OvirtMachineProviderSpec struct {
 	// and NUMA including pinning to the host for the instance.
 	// One of "disabled, existing, adjust"
 	AutoPinningPolicy string `json:"auto_pinning_policy,omitempty"`
+
+	// Hugepages is the size of a VM's hugepages to use in KiBs.
+	// Only 2048 and 1048576 supported.
+	Hugepages int32 `json:"hugepages,omitempty"`
 }
 
 // CPU defines the VM cpu, made of (Sockets * Cores * Threads)

@@ -140,6 +140,16 @@ func (is *InstanceService) InstanceCreate(
 			vmBuilder.PlacementPolicy(placementPolicy)
 		}
 	}
+	if providerSpec.Hugepages > 0 {
+		customProp, err := ovirtsdk.NewCustomPropertyBuilder().
+			Name("hugepages").
+			Value(fmt.Sprint(providerSpec.Hugepages)).
+			Build()
+		if err != nil {
+			return nil, err
+		}
+		vmBuilder.CustomPropertiesOfAny(customProp)
+	}
 
 	vm, err := vmBuilder.Build()
 	if err != nil {

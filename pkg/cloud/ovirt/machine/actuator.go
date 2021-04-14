@@ -451,6 +451,9 @@ func (actuator *OvirtActuator) validateMachine(machine *machinev1.Machine, confi
 			return apierrors.InvalidMachineConfiguration(fmt.Sprintf("%s", err))
 		}
 	}
+	if err := validateHugepages(config.Hugepages); err != nil {
+		return apierrors.InvalidMachineConfiguration(fmt.Sprintf("%s", err))
+	}
 	return nil
 }
 
@@ -492,6 +495,22 @@ func validateVirtualMachineType(vmtype string) *apierrors.MachineError {
 			"error creating oVirt instance: The machine type must "+
 				"be one of the following options: "+
 				"server, high_performance or desktop. The value: %s is not valid", vmtype)
+	}
+	return nil
+}
+
+// validateHugepages execute validation regarding the Virtual Machine hugepages
+// custom property (2048, 1048576).
+// Returns: nil or error
+func validateHugepages(value int32) error {
+	switch value {
+	case 0, 2048, 1048576:
+		return nil
+	default:
+		return fmt.Errorf(
+			"error creating oVirt instance: The machine `hugepages` custom property must " +
+				"be one of the following options: 2048, 1048576. " +
+				"The value: %d is not valid", value)
 	}
 	return nil
 }

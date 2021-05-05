@@ -159,7 +159,7 @@ func (is *InstanceService) InstanceCreate(
 	klog.Infof("creating VM: %v", vm.MustName())
 	response, err := is.Connection.SystemService().VmsService().Add().Vm(vm).Send()
 	if err != nil {
-		klog.Errorf("Failed creating VM", err)
+		klog.Errorf("Failed creating VM %v", err)
 		return nil, err
 	}
 
@@ -199,7 +199,7 @@ func (is *InstanceService) InstanceCreate(
 		Tag(ovirtsdk.NewTagBuilder().Name(ovirtClusterID).MustBuild()).
 		Send()
 	if err != nil {
-		klog.Errorf("Failed to add tag to VM, skipping", err)
+		klog.Errorf("Failed to add tag to VM, skipping %v", err)
 	}
 
 	err = is.handleAffinityGroups(
@@ -451,7 +451,7 @@ func (is *InstanceService) handleAffinityGroups(vm *ovirtsdk.Vm, cID string, ags
 		_, err = agService.GroupService(ag.MustId()).VmsService().Add().Vm(vm).Send()
 
 		// TODO: bug 1932320: Remove error handling workaround when BZ#1931932 is resolved and backported
-		if err != nil && !errors.Is(err, ovirtsdk.XMLTagNotMatchError{"action", "vm"}) {
+		if err != nil && !errors.Is(err, ovirtsdk.XMLTagNotMatchError{ActualTag: "action", ExpectedTag: "vm"}) {
 			return errors.Errorf(
 				"failed to add VM %s to AffinityGroup %s, error: %v",
 				vm.MustName(),

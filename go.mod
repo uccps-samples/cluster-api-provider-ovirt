@@ -1,10 +1,9 @@
 module github.com/openshift/cluster-api-provider-ovirt
 
-go 1.15
+go 1.16
 
 require (
 	github.com/go-logr/logr v0.3.0
-	github.com/go-logr/zapr v0.2.0 // indirect
 	github.com/openshift/client-go v0.0.0-20201214125552-e615e336eb49
 	github.com/openshift/machine-api-operator v0.2.1-0.20210104142355-8e6ae0acdfcf
 	github.com/ovirt/go-ovirt v0.0.0-20210308100159-ac0bcbc88d7c

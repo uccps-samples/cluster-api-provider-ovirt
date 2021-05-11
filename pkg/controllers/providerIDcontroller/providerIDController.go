@@ -3,6 +3,7 @@ package providerIDcontroller
 import (
 	"context"
 	"fmt"
+	ovirtClient "github.com/openshift/cluster-api-provider-ovirt/pkg/clients/ovirt"
 	common "github.com/openshift/cluster-api-provider-ovirt/pkg/controllers"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
@@ -63,18 +64,17 @@ func (r *providerIDController) fetchOvirtVmID(nodeName string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	send, err := c.SystemService().VmsService().List().Search(fmt.Sprintf("name=%s", nodeName)).Send()
+	ovirtC := ovirtClient.NewOvirtClient(c)
+
+	vm, err := ovirtC.GetVmByName(nodeName)
 	if err != nil {
 		r.Log.Error(err, "Error occurred will searching VM", "VM name", nodeName)
 		return "", err
 	}
-	vms := send.MustVms().Slice()
-	if l := len(vms); l > 1 {
-		return "", fmt.Errorf("expected to get 1 VM but got %v", l)
-	} else if l == 0 {
+	if vm == nil {
 		return "", nil
 	}
-	return vms[0].MustId(), nil
+	return vm.MustId(), nil
 }
 
 func Add(mgr manager.Manager, opts manager.Options) error {

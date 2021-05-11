@@ -3,6 +3,7 @@ package nodeController
 import (
 	"context"
 	"fmt"
+	ovirtClient "github.com/openshift/cluster-api-provider-ovirt/pkg/clients/ovirt"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
 	"k8s.io/klog/klogr"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
@@ -46,7 +47,12 @@ func (r *nodeController) Reconcile(ctx context.Context, request reconcile.Reques
 	if !strings.Contains(node.Spec.ProviderID, utils.ProviderIDPrefix) {
 		return reconcile.Result{}, nil
 	}
-	vm, err := r.getVmByName(node.Name)
+	c, err := r.GetConnection(common.NAMESPACE, common.CREDENTIALS_SECRET)
+	if err != nil {
+		return reconcile.Result{}, err
+	}
+	ovirtC := ovirtClient.NewOvirtClient(c)
+	vm, err := ovirtC.GetVmByName(node.Name)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("failed getting VM from oVirt: %v", err)
 	} else if vm == nil {
@@ -63,25 +69,6 @@ func (r *nodeController) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{Requeue: true, RequeueAfter: RETRY_INTERVAL_VM_DOWN}, nil
 	}
 	return reconcile.Result{}, nil
-}
-
-func (r *nodeController) getVmByName(name string) (*ovirtsdk.Vm, error) {
-	c, err := r.GetConnection(common.NAMESPACE, common.CREDENTIALS_SECRET)
-	if err != nil {
-		return nil, err
-	}
-	send, err := c.SystemService().VmsService().List().Search(fmt.Sprintf("name=%s", name)).Send()
-	if err != nil {
-		r.Log.Error(err, "Error occurred will searching VM", "VM name", name)
-		return nil, err
-	}
-	vms := send.MustVms().Slice()
-	if l := len(vms); l > 1 {
-		return nil, fmt.Errorf("expected to get 1 VM but got %v", l)
-	} else if l == 0 {
-		return nil, nil
-	}
-	return vms[0], nil
 }
 
 func Add(mgr manager.Manager, opts manager.Options) error {

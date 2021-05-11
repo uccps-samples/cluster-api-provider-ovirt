@@ -15,18 +15,18 @@ const (
 )
 
 type BaseController struct {
-	Log      logr.Logger
-	Client   client.Client
-	OvirtApi *ovirtsdk.Connection
+	Log             logr.Logger
+	Client          client.Client
+	ovirtConnection *ovirtsdk.Connection
 }
 
 func (b *BaseController) GetConnection(namespace, secretName string) (*ovirtsdk.Connection, error) {
 	var err error
-	if b.OvirtApi == nil || b.OvirtApi.Test() != nil {
+	if b.ovirtConnection == nil || b.ovirtConnection.Test() != nil {
 		// session expired or some other error, re-login.
-		b.OvirtApi, err = createApiConnection(b.Client, namespace, secretName)
+		b.ovirtConnection, err = createApiConnection(b.Client, namespace, secretName)
 	}
-	return b.OvirtApi, err
+	return b.ovirtConnection, err
 }
 
 //createApiConnection returns a a client to oVirt's API endpoint

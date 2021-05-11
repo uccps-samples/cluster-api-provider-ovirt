@@ -14,27 +14,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package ovirt
-
-import (
-	"github.com/openshift/machine-api-operator/pkg/generated/clientset/versioned/typed/machine/v1beta1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/record"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-)
+package utils
 
 const (
 	OvirtIdAnnotationKey = "VmId"
 	ProviderIDPrefix     = "ovirt://"
 )
-
-// ActuatorParams holds parameter information for Actuator
-type ActuatorParams struct {
-	Namespace      string
-	Client         client.Client
-	KubeClient     *kubernetes.Clientset
-	Scheme         *runtime.Scheme
-	MachinesClient v1beta1.MachineV1beta1Interface
-	EventRecorder  record.EventRecorder
-}

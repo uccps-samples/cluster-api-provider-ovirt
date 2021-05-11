@@ -2,7 +2,7 @@ package ovirt
 
 import (
 	"fmt"
-	"github.com/openshift/cluster-api-provider-ovirt/pkg/cloud/ovirt/clients"
+	"github.com/openshift/cluster-api-provider-ovirt/pkg/clients/ovirt"
 
 	"github.com/go-logr/logr"
 	ovirtsdk "github.com/ovirt/go-ovirt"
@@ -31,7 +31,7 @@ func (b *BaseController) GetConnection(namespace, secretName string) (*ovirtsdk.
 
 //createApiConnection returns a a client to oVirt's API endpoint
 func createApiConnection(client client.Client, namespace string, secretName string) (*ovirtsdk.Connection, error) {
-	creds, err := clients.GetCredentialsSecret(client, namespace, secretName)
+	creds, err := ovirt.GetCredentialsSecret(client, namespace, secretName)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed getting credentials for namespace %s, %s", namespace, err)

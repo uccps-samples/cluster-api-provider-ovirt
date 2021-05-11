@@ -3,6 +3,7 @@ package nodeController
 import (
 	"context"
 	"fmt"
+	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
 	"k8s.io/klog/klogr"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -12,8 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/openshift/cluster-api-provider-ovirt/pkg/cloud/ovirt"
-	common "github.com/openshift/cluster-api-provider-ovirt/pkg/cloud/ovirt/controllers"
+	common "github.com/openshift/cluster-api-provider-ovirt/pkg/controllers"
 	ovirtsdk "github.com/ovirt/go-ovirt"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -43,7 +43,7 @@ func (r *nodeController) Reconcile(ctx context.Context, request reconcile.Reques
 		// Error reading the object - requeue the request.
 		return reconcile.Result{}, fmt.Errorf("error getting node: %v", err)
 	}
-	if !strings.Contains(node.Spec.ProviderID, ovirt.ProviderIDPrefix) {
+	if !strings.Contains(node.Spec.ProviderID, utils.ProviderIDPrefix) {
 		return reconcile.Result{}, nil
 	}
 	vm, err := r.getVmByName(node.Name)

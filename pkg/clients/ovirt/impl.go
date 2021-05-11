@@ -3,7 +3,7 @@ Copyright oVirt Authors
 SPDX-License-Identifier: Apache-2.0
 */
 
-package clients
+package ovirt
 
 import (
 	"context"
@@ -47,10 +47,6 @@ type SshKeyPair struct {
 	// "-----BEGIN RSA PRIVATE KEY-----\nMIICXA..."
 	// It is only present if this KeyPair was just returned from a Create call.
 	PrivateKey string `json:"private_key"`
-}
-
-type InstanceListOpts struct {
-	Name string `json:"name"`
 }
 
 func NewInstanceServiceFromMachine(machine *machinev1.Machine, connection *ovirtsdk.Connection) (*InstanceService, error) {
@@ -297,7 +293,7 @@ func (is *InstanceService) InstanceDelete(id string) error {
 }
 
 // Get VM by ID or Name
-func (is *InstanceService) GetVm(machine machinev1.Machine) (instance *Instance, err error) {
+func (is *InstanceService) GetVmByMachine(machine machinev1.Machine) (instance *Instance, err error) {
 	if machine.Spec.ProviderID != nil && *machine.Spec.ProviderID != "" {
 		instance, err = is.GetVmByID(*machine.Spec.ProviderID)
 		if err == nil {
@@ -306,7 +302,6 @@ func (is *InstanceService) GetVm(machine machinev1.Machine) (instance *Instance,
 	}
 	instance, err = is.GetVmByName()
 	return instance, err
-
 }
 
 func (is *InstanceService) GetVmByID(resourceId string) (instance *Instance, err error) {

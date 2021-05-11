@@ -3,8 +3,8 @@ package providerIDcontroller
 import (
 	"context"
 	"fmt"
-	"github.com/openshift/cluster-api-provider-ovirt/pkg/cloud/ovirt"
-	common "github.com/openshift/cluster-api-provider-ovirt/pkg/cloud/ovirt/controllers"
+	common "github.com/openshift/cluster-api-provider-ovirt/pkg/controllers"
+	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/klog/klogr"
@@ -49,7 +49,7 @@ func (r *providerIDController) Reconcile(ctx context.Context, request reconcile.
 			r.Log.Info("Node not found in oVirt", "node", node.Name)
 			return reconcile.Result{}, nil
 		}
-		node.Spec.ProviderID = ovirt.ProviderIDPrefix + id
+		node.Spec.ProviderID = utils.ProviderIDPrefix + id
 		err = r.Client.Update(ctx, &node)
 		if err != nil {
 			return reconcile.Result{}, fmt.Errorf("failed updating node %s: %v", node.Name, err)

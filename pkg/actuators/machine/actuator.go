@@ -8,6 +8,8 @@ package machine
 import (
 	"context"
 	"fmt"
+	ovirt2 "github.com/openshift/cluster-api-provider-ovirt/pkg/clients/ovirt"
+	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
 	"time"
 
 	"k8s.io/client-go/rest"
@@ -26,8 +28,6 @@ import (
 
 	osclientset "github.com/openshift/client-go/config/clientset/versioned"
 	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
-	"github.com/openshift/cluster-api-provider-ovirt/pkg/cloud/ovirt"
-	"github.com/openshift/cluster-api-provider-ovirt/pkg/cloud/ovirt/clients"
 	ovirtsdk "github.com/ovirt/go-ovirt"
 
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -42,7 +42,7 @@ const (
 )
 
 type OvirtActuator struct {
-	params         ovirt.ActuatorParams
+	params         ActuatorParams
 	scheme         *runtime.Scheme
 	client         client.Client
 	KubeClient     *kubernetes.Clientset
@@ -52,7 +52,7 @@ type OvirtActuator struct {
 	OSClient       osclientset.Interface
 }
 
-func NewActuator(params ovirt.ActuatorParams) (*OvirtActuator, error) {
+func NewActuator(params ActuatorParams) (*OvirtActuator, error) {
 	config := ctrl.GetConfigOrDie()
 	osClient := osclientset.NewForConfigOrDie(rest.AddUserAgent(config, "cluster-api-provider-ovirt"))
 
@@ -80,7 +80,7 @@ func (actuator *OvirtActuator) Create(ctx context.Context, machine *machinev1.Ma
 		return fmt.Errorf("failed to create connection to oVirt API")
 	}
 
-	machineService, err := clients.NewInstanceServiceFromMachine(machine, connection)
+	machineService, err := ovirt2.NewInstanceServiceFromMachine(machine, connection)
 	if err != nil {
 		return err
 	}
@@ -107,7 +107,7 @@ func (actuator *OvirtActuator) Create(ctx context.Context, machine *machinev1.Ma
 
 	// Wait till ready
 	err = util.PollImmediate(RetryIntervalInstanceStatus, TimeoutInstanceCreate, func() (bool, error) {
-		instance, err := machineService.GetVm(*machine)
+		instance, err := machineService.GetVmByMachine(*machine)
 		if err != nil {
 			return false, nil
 		}
@@ -127,7 +127,7 @@ func (actuator *OvirtActuator) Create(ctx context.Context, machine *machinev1.Ma
 
 	// Wait till running
 	err = util.PollImmediate(RetryIntervalInstanceStatus, TimeoutInstanceCreate, func() (bool, error) {
-		instance, err := machineService.GetVm(*machine)
+		instance, err := machineService.GetVmByMachine(*machine)
 		if err != nil {
 			return false, nil
 		}
@@ -155,11 +155,11 @@ func (actuator *OvirtActuator) Exists(_ context.Context, machine *machinev1.Mach
 		return false, fmt.Errorf("failed to create connection to oVirt API")
 	}
 
-	machineService, err := clients.NewInstanceServiceFromMachine(machine, connection)
+	machineService, err := ovirt2.NewInstanceServiceFromMachine(machine, connection)
 	if err != nil {
 		return false, err
 	}
-	vm, err := machineService.GetVm(*machine)
+	vm, err := machineService.GetVmByMachine(*machine)
 	if err != nil {
 		return false, err
 	}
@@ -179,12 +179,12 @@ func (actuator *OvirtActuator) Update(ctx context.Context, machine *machinev1.Ma
 		return fmt.Errorf("failed to create connection to oVirt API")
 	}
 
-	machineService, err := clients.NewInstanceServiceFromMachine(machine, connection)
+	machineService, err := ovirt2.NewInstanceServiceFromMachine(machine, connection)
 	if err != nil {
 		return err
 	}
 
-	var vm *clients.Instance
+	var vm *ovirt2.Instance
 	if machine.Spec.ProviderID == nil || *machine.Spec.ProviderID == "" {
 		vm, err = machineService.GetVmByName()
 		if err != nil {
@@ -192,7 +192,7 @@ func (actuator *OvirtActuator) Update(ctx context.Context, machine *machinev1.Ma
 				"Cannot find a VM by name: %v", err))
 		}
 	} else {
-		vm, err = machineService.GetVm(*machine)
+		vm, err = machineService.GetVmByMachine(*machine)
 		if err != nil {
 			return actuator.handleMachineError(machine, apierrors.InvalidMachineConfiguration(
 				"Cannot find a VM by id: %v", err))
@@ -212,12 +212,12 @@ func (actuator *OvirtActuator) Delete(_ context.Context, machine *machinev1.Mach
 		return err
 	}
 
-	machineService, err := clients.NewInstanceServiceFromMachine(machine, connection)
+	machineService, err := ovirt2.NewInstanceServiceFromMachine(machine, connection)
 	if err != nil {
 		return err
 	}
 
-	instance, err := machineService.GetVm(*machine)
+	instance, err := machineService.GetVmByMachine(*machine)
 	if err != nil {
 		return err
 	}
@@ -254,7 +254,7 @@ func (actuator *OvirtActuator) handleMachineError(machine *machinev1.Machine, er
 	return err
 }
 
-func (actuator *OvirtActuator) patchMachine(ctx context.Context, machine *machinev1.Machine, instance *clients.Instance, condition ovirtconfigv1.OvirtMachineProviderCondition) error {
+func (actuator *OvirtActuator) patchMachine(ctx context.Context, machine *machinev1.Machine, instance *ovirt2.Instance, condition ovirtconfigv1.OvirtMachineProviderCondition) error {
 	actuator.reconcileProviderID(machine, instance)
 	klog.V(5).Infof("Machine %s provider status %s", instance.MustName(), instance.MustStatus())
 
@@ -302,7 +302,7 @@ func (actuator *OvirtActuator) getClusterAddress(ctx context.Context) (map[strin
 	return clusterAddr, nil
 }
 
-func (actuator *OvirtActuator) reconcileNetwork(ctx context.Context, machine *machinev1.Machine, instance *clients.Instance) error {
+func (actuator *OvirtActuator) reconcileNetwork(ctx context.Context, machine *machinev1.Machine, instance *ovirt2.Instance) error {
 	switch instance.MustStatus() {
 	// expect IP addresses only on those statuses.
 	// in those statuses we 'll try reconciling
@@ -321,7 +321,7 @@ func (actuator *OvirtActuator) reconcileNetwork(ctx context.Context, machine *ma
 	}
 	name := instance.MustName()
 	addresses := []corev1.NodeAddress{{Address: name, Type: corev1.NodeInternalDNS}}
-	machineService, err := clients.NewInstanceServiceFromMachine(machine, actuator.ovirtApi)
+	machineService, err := ovirt2.NewInstanceServiceFromMachine(machine, actuator.ovirtApi)
 	if err != nil {
 		return err
 	}
@@ -348,7 +348,7 @@ func (actuator *OvirtActuator) reconcileNetwork(ctx context.Context, machine *ma
 	return nil
 }
 
-func (actuator *OvirtActuator) reconcileProviderStatus(machine *machinev1.Machine, instance *clients.Instance, condition ovirtconfigv1.OvirtMachineProviderCondition) error {
+func (actuator *OvirtActuator) reconcileProviderStatus(machine *machinev1.Machine, instance *ovirt2.Instance, condition ovirtconfigv1.OvirtMachineProviderCondition) error {
 	status := string(instance.MustStatus())
 	name := instance.MustId()
 
@@ -367,15 +367,15 @@ func (actuator *OvirtActuator) reconcileProviderStatus(machine *machinev1.Machin
 	return nil
 }
 
-func (actuator *OvirtActuator) reconcileProviderID(machine *machinev1.Machine, instance *clients.Instance) {
+func (actuator *OvirtActuator) reconcileProviderID(machine *machinev1.Machine, instance *ovirt2.Instance) {
 	id := instance.MustId()
-	providerID := ovirt.ProviderIDPrefix + id
+	providerID := utils.ProviderIDPrefix + id
 	machine.Spec.ProviderID = &providerID
 
 	if machine.ObjectMeta.Annotations == nil {
 		machine.ObjectMeta.Annotations = make(map[string]string)
 	}
-	machine.ObjectMeta.Annotations[ovirt.OvirtIdAnnotationKey] = id
+	machine.ObjectMeta.Annotations[utils.OvirtIdAnnotationKey] = id
 }
 
 func (actuator *OvirtActuator) reconcileConditions(
@@ -589,7 +589,7 @@ func versionCompare(v *ovirtsdk.Version, other *ovirtsdk.Version) (int64, error)
 
 //createApiConnection returns a a client to oVirt's API endpoint
 func createApiConnection(client client.Client, namespace string, secretName string) (*ovirtsdk.Connection, error) {
-	creds, err := clients.GetCredentialsSecret(client, namespace, secretName)
+	creds, err := ovirt2.GetCredentialsSecret(client, namespace, secretName)
 
 	if err != nil {
 		klog.Infof("failed getting credentials for namespace %s, %s", namespace, err)
@@ -621,7 +621,7 @@ func (actuator *OvirtActuator) getConnection(namespace, secretName string) (*ovi
 	return actuator.ovirtApi, err
 }
 
-func (actuator *OvirtActuator) reconcileAnnotations(machine *machinev1.Machine, instance *clients.Instance) {
+func (actuator *OvirtActuator) reconcileAnnotations(machine *machinev1.Machine, instance *ovirt2.Instance) {
 	if machine.ObjectMeta.Annotations == nil {
 		machine.ObjectMeta.Annotations = make(map[string]string)
 	}
@@ -644,4 +644,14 @@ func conditionFailed() ovirtconfigv1.OvirtMachineProviderCondition {
 		Reason:  "MachineCreateFailed",
 		Message: "Machine creation failed",
 	}
+}
+
+// ActuatorParams holds parameter information for Actuator
+type ActuatorParams struct {
+	Namespace      string
+	Client         client.Client
+	KubeClient     *kubernetes.Clientset
+	Scheme         *runtime.Scheme
+	MachinesClient v1beta1.MachineV1beta1Interface
+	EventRecorder  record.EventRecorder
 }

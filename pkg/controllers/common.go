@@ -2,7 +2,7 @@ package ovirt
 
 import (
 	"fmt"
-	"github.com/openshift/cluster-api-provider-ovirt/pkg/clients/ovirt"
+	ovirtClient "github.com/openshift/cluster-api-provider-ovirt/pkg/clients/ovirt"
 
 	"github.com/go-logr/logr"
 	ovirtsdk "github.com/ovirt/go-ovirt"
@@ -23,30 +23,12 @@ type BaseController struct {
 func (b *BaseController) GetConnection(namespace, secretName string) (*ovirtsdk.Connection, error) {
 	var err error
 	if b.ovirtConnection == nil || b.ovirtConnection.Test() != nil {
+		creds, err := ovirtClient.GetCredentialsSecret(b.Client, namespace, secretName)
+		if err != nil {
+			return nil, fmt.Errorf("failed getting credentials for namespace %s, %s", namespace, err)
+		}
 		// session expired or some other error, re-login.
-		b.ovirtConnection, err = createApiConnection(b.Client, namespace, secretName)
+		b.ovirtConnection, err = ovirtClient.CreateApiConnection(creds, namespace, secretName)
 	}
 	return b.ovirtConnection, err
-}
-
-//createApiConnection returns a a client to oVirt's API endpoint
-func createApiConnection(client client.Client, namespace string, secretName string) (*ovirtsdk.Connection, error) {
-	creds, err := ovirt.GetCredentialsSecret(client, namespace, secretName)
-
-	if err != nil {
-		return nil, fmt.Errorf("failed getting credentials for namespace %s, %s", namespace, err)
-	}
-
-	connection, err := ovirtsdk.NewConnectionBuilder().
-		URL(creds.URL).
-		Username(creds.Username).
-		Password(creds.Password).
-		CAFile(creds.CAFile).
-		Insecure(creds.Insecure).
-		Build()
-	if err != nil {
-		return nil, err
-	}
-
-	return connection, nil
 }

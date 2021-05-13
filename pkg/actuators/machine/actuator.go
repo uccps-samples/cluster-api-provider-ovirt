@@ -579,35 +579,19 @@ func versionCompare(v *ovirtsdk.Version, other *ovirtsdk.Version) (int64, error)
 	return result, nil
 }
 
-//createApiConnection returns a a client to oVirt's API endpoint
-func createApiConnection(client client.Client, namespace string, secretName string) (*ovirtsdk.Connection, error) {
-	creds, err := ovirtClient.GetCredentialsSecret(client, namespace, secretName)
-
-	if err != nil {
-		klog.Infof("failed getting credentials for namespace %s, %s", namespace, err)
-		return nil, err
-	}
-
-	connection, err := ovirtsdk.NewConnectionBuilder().
-		URL(creds.URL).
-		Username(creds.Username).
-		Password(creds.Password).
-		CAFile(creds.CAFile).
-		Insecure(creds.Insecure).
-		Build()
-	if err != nil {
-		return nil, err
-	}
-
-	return connection, nil
-}
-
 //getConnection returns a a client to oVirt's API endpoint
 func (actuator *OvirtActuator) getConnection(namespace, secretName string) (*ovirtsdk.Connection, error) {
 	var err error
 	if actuator.ovirtConnection == nil || actuator.ovirtConnection.Test() != nil {
+		creds, err := ovirtClient.GetCredentialsSecret(actuator.client, namespace, secretName)
+		if err != nil {
+			return nil, fmt.Errorf("failed getting credentials for namespace %s, %s", namespace, err)
+		}
 		// session expired or some other error, re-login.
-		actuator.ovirtConnection, err = createApiConnection(actuator.client, namespace, secretName)
+		actuator.ovirtConnection, err = ovirtClient.CreateApiConnection(creds, namespace, secretName)
+		if err != nil {
+			return nil, fmt.Errorf("failed getting credentials for namespace %s, %s", namespace, err)
+		}
 	}
 
 	return actuator.ovirtConnection, err

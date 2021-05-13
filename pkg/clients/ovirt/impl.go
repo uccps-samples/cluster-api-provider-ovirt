@@ -6,7 +6,6 @@ SPDX-License-Identifier: Apache-2.0
 package ovirt
 
 import (
-	"context"
 	"fmt"
 	apierrors "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	"math"
@@ -14,8 +13,6 @@ import (
 	"time"
 
 	"github.com/pkg/errors"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
 	"k8s.io/klog"
 
 	ovirtsdk "github.com/ovirt/go-ovirt"
@@ -30,24 +27,13 @@ var _ OvirtClient = (*ovirtClient)(nil)
 
 func (is *ovirtClient) CreateVmByMachine(
 	machine *machinev1.Machine,
-	providerSpec *ovirtconfigv1.OvirtMachineProviderSpec,
-	kubeClient *kubernetes.Clientset) (instance *Instance, err error) {
+	ignition []byte,
+	providerSpec *ovirtconfigv1.OvirtMachineProviderSpec) (instance *Instance, err error) {
 
 	if providerSpec == nil {
 		return nil, fmt.Errorf("create Options need be specified to create instace")
 	}
 
-	userDataSecret, err := kubeClient.CoreV1().
-		Secrets(machine.Namespace).
-		Get(context.TODO(), providerSpec.UserDataSecret.Name, v1.GetOptions{})
-	if err != nil {
-		return nil, fmt.Errorf("failed to fetch user data secret for the machine namespace: %s", err)
-	}
-
-	ignition, ok := userDataSecret.Data["userData"]
-	if !ok {
-		return nil, fmt.Errorf("failed extracting ignition from user data secret %v", string(ignition))
-	}
 	cluster := ovirtsdk.NewClusterBuilder().Id(providerSpec.ClusterId).MustBuild()
 	template := ovirtsdk.NewTemplateBuilder().Name(providerSpec.TemplateName).MustBuild()
 	init := ovirtsdk.NewInitializationBuilder().
@@ -84,7 +70,7 @@ func (is *ovirtClient) CreateVmByMachine(
 
 	isAutoPinning := false
 	if providerSpec.AutoPinningPolicy != "" {
-		autoPinningPolicy := mapAutoPinningPolicy(providerSpec.AutoPinningPolicy)
+		autoPinningPolicy := ovirtsdk.AutoPinningPolicy(providerSpec.AutoPinningPolicy)
 
 		// if we have a policy, we need to set the pinning to all the hosts in the cluster.
 		if autoPinningPolicy != ovirtsdk.AUTOPINNINGPOLICY_DISABLED {
@@ -149,7 +135,7 @@ func (is *ovirtClient) CreateVmByMachine(
 	}
 
 	if isAutoPinning {
-		err = is.handleAutoPinning(vmID, mapAutoPinningPolicy(providerSpec.AutoPinningPolicy))
+		err = is.handleAutoPinning(vmID, ovirtsdk.AutoPinningPolicy(providerSpec.AutoPinningPolicy))
 		if err != nil {
 			klog.Errorf("updating the VM (%s) with auto pinning policy failed! %v", vmID, err)
 		}
@@ -458,13 +444,22 @@ func (is *ovirtClient) handleAutoPinning(id string, autoPinningPolicy ovirtsdk.A
 	return nil
 }
 
-func mapAutoPinningPolicy(policy string) ovirtsdk.AutoPinningPolicy {
-	switch policy {
-	case "none":
-		return ovirtsdk.AUTOPINNINGPOLICY_DISABLED
-	case "resize_and_pin":
-		return ovirtsdk.AUTOPINNINGPOLICY_ADJUST
-	default:
-		return ovirtsdk.AUTOPINNINGPOLICY_DISABLED
+// getEngineVersion will return the engine version we are using
+func (is *ovirtClient) GetEngineVersion() (*ovirtsdk.Version, error) {
+	return is.connection.SystemService().Get().MustSend().MustApi().MustProductInfo().MustVersion(), nil
+}
+
+//createApiConnection returns a a client to oVirt's API endpoint
+func CreateApiConnection(creds *OvirtCreds) (*ovirtsdk.Connection, error) {
+	connection, err := ovirtsdk.NewConnectionBuilder().
+		URL(creds.URL).
+		Username(creds.Username).
+		Password(creds.Password).
+		CAFile(creds.CAFile).
+		Insecure(creds.Insecure).
+		Build()
+	if err != nil {
+		return nil, err
 	}
+	return connection, nil
 }

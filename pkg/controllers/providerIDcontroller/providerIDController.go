@@ -60,7 +60,7 @@ func (r *providerIDController) Reconcile(ctx context.Context, request reconcile.
 }
 
 func (r *providerIDController) fetchOvirtVmID(nodeName string) (string, error) {
-	c, err := r.GetConnection(common.NAMESPACE, common.CREDENTIALS_SECRET)
+	c, err := r.GetConnection()
 	if err != nil {
 		return "", err
 	}

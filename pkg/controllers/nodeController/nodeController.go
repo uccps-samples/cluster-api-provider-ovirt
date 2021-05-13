@@ -47,7 +47,7 @@ func (r *nodeController) Reconcile(ctx context.Context, request reconcile.Reques
 	if !strings.Contains(node.Spec.ProviderID, utils.ProviderIDPrefix) {
 		return reconcile.Result{}, nil
 	}
-	c, err := r.GetConnection(common.NAMESPACE, common.CREDENTIALS_SECRET)
+	c, err := r.GetConnection()
 	if err != nil {
 		return reconcile.Result{}, err
 	}

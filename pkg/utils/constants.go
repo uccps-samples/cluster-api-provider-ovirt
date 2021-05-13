@@ -17,6 +17,8 @@ limitations under the License.
 package utils
 
 const (
-	OvirtIdAnnotationKey = "VmId"
-	ProviderIDPrefix     = "ovirt://"
+	OvirtIdAnnotationKey      = "VmId"
+	ProviderIDPrefix          = "ovirt://"
+	OvirtCloudCredsSecretName = "ovirt-credentials"
+	NAMESPACE                 = "openshift-machine-api"
 )

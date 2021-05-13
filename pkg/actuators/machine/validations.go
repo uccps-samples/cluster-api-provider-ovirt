@@ -25,15 +25,6 @@ func validateMachine(ovirtClient ovirtC.OvirtClient, config *ovirtconfigv1.Ovirt
 		return err
 	}
 
-	// CredentialsSecret
-	if config.CredentialsSecret == nil {
-		return apierrors.InvalidMachineConfiguration(
-			fmt.Sprintf("%s CredentialsSecret must be provided!", ErrorInvalidMachineObject))
-	} else if config.CredentialsSecret.Name == "" {
-		return apierrors.InvalidMachineConfiguration(
-			fmt.Sprintf("%s CredentialsSecret *Name* must be provided!", ErrorInvalidMachineObject))
-	}
-
 	// root disk of the node
 	if config.OSDisk == nil {
 		return apierrors.InvalidMachineConfiguration(

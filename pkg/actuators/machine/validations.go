@@ -29,6 +29,9 @@ func validateMachine(ovirtClient ovirtC.OvirtClient, config *ovirtconfigv1.Ovirt
 	if config.OSDisk == nil {
 		return apierrors.InvalidMachineConfiguration(
 			fmt.Sprintf("%s OS Disk (os_disk) must be specified!", ErrorInvalidMachineObject))
+	} else if config.OSDisk.SizeGB == 0 {
+		return apierrors.InvalidMachineConfiguration(
+			fmt.Sprintf("%s OS Disk (os_disk) *SizeGB* must be specified!", ErrorInvalidMachineObject))
 	}
 
 	err = validateVirtualMachineType(config.VMType)

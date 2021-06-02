@@ -104,7 +104,6 @@ func (actuator *OvirtActuator) Create(ctx context.Context, machine *machinev1.Ma
 	if err := mScope.patchMachine(ctx, conditionSuccess()); err != nil {
 		return actuator.handleMachineError(machine, "Create", apierrors.CreateMachine(
 			"Error patching Machine %v", err))
-		return err
 	}
 	actuator.eventRecorder.Eventf(machine, corev1.EventTypeNormal, "Created", "Updated Machine %v", machine.Name)
 	return nil
@@ -144,7 +143,6 @@ func (actuator *OvirtActuator) Update(ctx context.Context, machine *machinev1.Ma
 	if err := mScope.patchMachine(ctx, conditionSuccess()); err != nil {
 		return actuator.handleMachineError(machine, "Update", apierrors.UpdateMachine(
 			"Error patching Machine %v", err))
-		return err
 	}
 
 	actuator.eventRecorder.Eventf(machine, corev1.EventTypeNormal, "Update", "Updated Machine %v", machine.Name)
@@ -162,7 +160,6 @@ func (actuator *OvirtActuator) Delete(ctx context.Context, machine *machinev1.Ma
 	if err := mScope.delete(); err != nil {
 		return actuator.handleMachineError(machine, "Deleted", apierrors.UpdateMachine(
 			"error deleting Ovirt instance %v", err))
-		return err
 	}
 	actuator.eventRecorder.Eventf(machine, corev1.EventTypeNormal, "Deleted", "Deleted Machine %v", machine.Name)
 	return nil

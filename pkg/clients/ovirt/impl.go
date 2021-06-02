@@ -23,10 +23,12 @@ import (
 	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
 )
 
-var _ OvirtClient = (*ovirtClient)(nil)
+var _ Client = (*ovirtClient)(nil)
 
-func (is *ovirtClient) CreateVmByMachine(
-	machine *machinev1.Machine,
+// CreateVMByMachine creates an oVirt VM according to the ovirt provider spec.
+func (is *ovirtClient) CreateVMByMachine(
+	machineName string,
+	ovirtClusterID string,
 	ignition []byte,
 	providerSpec *ovirtconfigv1.OvirtMachineProviderSpec) (instance *Instance, err error) {
 
@@ -38,11 +40,11 @@ func (is *ovirtClient) CreateVmByMachine(
 	template := ovirtsdk.NewTemplateBuilder().Name(providerSpec.TemplateName).MustBuild()
 	init := ovirtsdk.NewInitializationBuilder().
 		CustomScript(string(ignition)).
-		HostName(machine.Name).
+		HostName(machineName).
 		MustBuild()
 
 	vmBuilder := ovirtsdk.NewVmBuilder().
-		Name(machine.Name).
+		Name(machineName).
 		Cluster(cluster).
 		Template(template).
 		Initialization(init)
@@ -112,8 +114,6 @@ func (is *ovirtClient) CreateVmByMachine(
 	}
 
 	vmID := response.MustVm().MustId()
-
-	ovirtClusterID := machine.Labels["machine.openshift.io/cluster-api-cluster"]
 
 	err = is.connection.WaitForVM(vmID, ovirtsdk.VMSTATUS_DOWN, time.Minute)
 	if err != nil {
@@ -215,6 +215,7 @@ func (is *ovirtClient) handleDiskExtension(vmService *ovirtsdk.VmService, create
 	return nil
 }
 
+// DeleteVM deletes a VM with the given ID from the oVirt engine
 func (is *ovirtClient) DeleteVM(id string) error {
 	klog.Infof("Deleting VM with ID: %s", id)
 	vmService := is.connection.SystemService().VmsService().VmService(id)
@@ -244,24 +245,27 @@ func (is *ovirtClient) DeleteVM(id string) error {
 	return err
 }
 
-// Get VM by ID or Name
-func (is *ovirtClient) GetVmByMachine(machine machinev1.Machine) (instance *Instance, err error) {
+// GetVMByMachine returns the VM instance corresponding to the machine object
+// If there is no VM corresponding to the machine object then nil will be returned
+func (is *ovirtClient) GetVMByMachine(machine machinev1.Machine) (instance *Instance, err error) {
 	if machine.Spec.ProviderID != nil && *machine.Spec.ProviderID != "" {
-		instance, err = is.GetVmByID(*machine.Spec.ProviderID)
+		instance, err = is.GetVMByID(*machine.Spec.ProviderID)
 		if err == nil {
 			return instance, err
 		}
 	}
-	instance, err = is.GetVmByName(machine.Name)
+	instance, err = is.GetVMByName(machine.Name)
 	return instance, err
 }
 
-func (is *ovirtClient) GetVmByID(resourceId string) (instance *Instance, err error) {
-	klog.Infof("Fetching VM by ID: %s", resourceId)
-	if resourceId == "" {
-		return nil, fmt.Errorf("resourceId should be specified to get detail")
+// GetVMByID returns an oVirt VM instance in case it exists in the oVirt env
+// If there is no VM with the given ID then nil will be returned
+func (is *ovirtClient) GetVMByID(id string) (instance *Instance, err error) {
+	klog.Infof("Fetching VM by ID: %s", id)
+	if id == "" {
+		return nil, fmt.Errorf("vm id should be specified")
 	}
-	response, err := is.connection.SystemService().VmsService().VmService(resourceId).Get().Send()
+	response, err := is.connection.SystemService().VmsService().VmService(id).Get().Send()
 	if err != nil {
 		return nil, err
 	}
@@ -269,7 +273,9 @@ func (is *ovirtClient) GetVmByID(resourceId string) (instance *Instance, err err
 	return &Instance{Vm: response.MustVm()}, nil
 }
 
-func (is *ovirtClient) GetVmByName(mName string) (*Instance, error) {
+// GetVMByName returns an oVirt VM instance in case it exists in the oVirt env
+// If there is no VM with the given name then nil will be returned
+func (is *ovirtClient) GetVMByName(mName string) (*Instance, error) {
 	response, err := is.connection.SystemService().VmsService().
 		List().Search("name=" + mName).Send()
 	if err != nil {
@@ -327,9 +333,8 @@ func (is *ovirtClient) handleNics(vmService *ovirtsdk.VmService, spec *ovirtconf
 	return nil
 }
 
-//Find virtual machine IP Address by ID
+// Find virtual machine IP Address by ID
 func (is *ovirtClient) FindVirtualMachineIP(id string, excludeAddr map[string]int) (string, error) {
-
 	vmService := is.connection.SystemService().VmsService().VmService(id)
 
 	// Get the guest reported devices
@@ -373,7 +378,6 @@ func (is *ovirtClient) FindVirtualMachineIP(id string, excludeAddr map[string]in
 }
 
 func (is *ovirtClient) getAffinityGroups(cID string, agNames []string) (ag []*ovirtsdk.AffinityGroup, err error) {
-	var ags []*ovirtsdk.AffinityGroup
 	res, err := is.connection.SystemService().ClustersService().
 		ClusterService(cID).AffinityGroupsService().
 		List().Send()
@@ -388,9 +392,9 @@ func (is *ovirtClient) getAffinityGroups(cID string, agNames []string) (ag []*ov
 		if _, ok := agNamesMap[agName]; !ok {
 			return nil, errors.Errorf("affinity group %v was not found on cluster %v", agName, cID)
 		}
-		ags = append(ags, agNamesMap[agName])
+		ag = append(ag, agNamesMap[agName])
 	}
-	return ags, nil
+	return ag, nil
 }
 
 // handleAffinityGroups adds the VM to the provided affinity groups
@@ -418,8 +422,8 @@ func (is *ovirtClient) handleAffinityGroups(vm *ovirtsdk.Vm, cID string, agsName
 }
 
 // getHostsInCluster will return a HostSlice of the hosts in a given cluster ID.
-func (is *ovirtClient) getHostsInCluster(clusterId string) (*ovirtsdk.HostSlice, error) {
-	clusterService := is.connection.SystemService().ClustersService().ClusterService(clusterId)
+func (is *ovirtClient) getHostsInCluster(clusterID string) (*ovirtsdk.HostSlice, error) {
+	clusterService := is.connection.SystemService().ClustersService().ClusterService(clusterID)
 	clusterGet, err := clusterService.Get().Send()
 	if err != nil {
 		return nil, errors.Errorf("failed to get the cluster: %v", err)
@@ -436,21 +440,20 @@ func (is *ovirtClient) getHostsInCluster(clusterId string) (*ovirtsdk.HostSlice,
 // handleAutoPinning updates the VM after creation to set the auto pinning policy configuration.
 func (is *ovirtClient) handleAutoPinning(id string, autoPinningPolicy ovirtsdk.AutoPinningPolicy) error {
 	vmService := is.connection.SystemService().VmsService().VmService(id)
-	optimizeCpuSettings := autoPinningPolicy == ovirtsdk.AUTOPINNINGPOLICY_ADJUST
-	_, err := vmService.AutoPinCpuAndNumaNodes().OptimizeCpuSettings(optimizeCpuSettings).Send()
+	optimizeCPUSettings := autoPinningPolicy == ovirtsdk.AUTOPINNINGPOLICY_ADJUST
+	_, err := vmService.AutoPinCpuAndNumaNodes().OptimizeCpuSettings(optimizeCPUSettings).Send()
 	if err != nil {
 		return errors.Errorf("failed to set the auto pinning policy on the VM!, %v", err)
 	}
 	return nil
 }
 
-// getEngineVersion will return the engine version we are using
 func (is *ovirtClient) GetEngineVersion() (*ovirtsdk.Version, error) {
 	return is.connection.SystemService().Get().MustSend().MustApi().MustProductInfo().MustVersion(), nil
 }
 
-//createApiConnection returns a a client to oVirt's API endpoint
-func CreateApiConnection(creds *OvirtCreds) (*ovirtsdk.Connection, error) {
+// CreateAPIConnection returns a a client to oVirt's API endpoint by using the given credentials
+func CreateAPIConnection(creds *Creds) (*ovirtsdk.Connection, error) {
 	connection, err := ovirtsdk.NewConnectionBuilder().
 		URL(creds.URL).
 		Username(creds.Username).

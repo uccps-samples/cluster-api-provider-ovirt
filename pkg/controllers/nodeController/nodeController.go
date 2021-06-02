@@ -23,12 +23,16 @@ import (
 
 var _ reconcile.Reconciler = &nodeController{}
 
-const RETRY_INTERVAL_VM_DOWN = 60 * time.Second
+const (
+	retryIntervalVMDownSec = 60
+	controllerName         = "NodeController"
+)
 
 type nodeController struct {
 	common.BaseController
 }
 
+// Reconcile implements controller runtime Reconciler interface.
 func (r *nodeController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	r.Log.Info("NodeController, Reconciling:", "Node", request.NamespacedName)
 	// Fetch the Node instance
@@ -52,14 +56,14 @@ func (r *nodeController) Reconcile(ctx context.Context, request reconcile.Reques
 		return reconcile.Result{}, err
 	}
 	ovirtC := ovirtClient.NewOvirtClient(c)
-	vm, err := ovirtC.GetVmByName(node.Name)
+	vm, err := ovirtC.GetVMByName(node.Name)
 	if err != nil {
 		return reconcile.Result{}, fmt.Errorf("failed getting VM from oVirt: %v", err)
 	} else if vm == nil {
 		// Node doesn't exist in oVirt platform, deleting node object
 		r.Log.Info(
 			"Deleting Node from cluster since it has been removed from the oVirt engine",
-			"node", node.Name)
+			"Node", node.Name)
 		if err := r.Client.Delete(ctx, &node); err != nil {
 			return reconcile.Result{}, fmt.Errorf("Error deleting node: %v, error is: %v", node.Name, err)
 		}
@@ -71,18 +75,14 @@ func (r *nodeController) Reconcile(ctx context.Context, request reconcile.Reques
 	return reconcile.Result{}, nil
 }
 
-func Add(mgr manager.Manager, opts manager.Options) error {
-	nc, err := NewNodeController(mgr)
-
-	if err != nil {
-		return fmt.Errorf("error building reconciler: %v", err)
-	}
-
-	c, err := controller.New("NodeController", mgr, controller.Options{Reconciler: nc})
+// Creates a new Node Controller and adds it to the manager
+// The Node Controller watches changes on Node objects in the cluster
+func Add(mgr manager.Manager) error {
+	nc := NewNodeController(mgr)
+	c, err := controller.New(controllerName, mgr, controller.Options{Reconciler: nc})
 	if err != nil {
 		return err
 	}
-
 	//Watch node changes
 	err = c.Watch(&source.Kind{Type: &corev1.Node{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
@@ -92,12 +92,12 @@ func Add(mgr manager.Manager, opts manager.Options) error {
 	return nil
 }
 
-func NewNodeController(mgr manager.Manager) (*nodeController, error) {
+func NewNodeController(mgr manager.Manager) *nodeController {
 	log.SetLogger(klogr.New())
 	return &nodeController{
 		BaseController: common.BaseController{
-			Log:    log.Log.WithName("controllers").WithName("nodeController"),
+			Log:    log.Log.WithName("controllers").WithName(controllerName),
 			Client: mgr.GetClient(),
 		},
-	}, nil
+	}
 }

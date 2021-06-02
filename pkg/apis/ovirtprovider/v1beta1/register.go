@@ -50,7 +50,6 @@ func MachineSpecFromProviderSpec(providerSpec machinev1.ProviderSpec) (*OvirtMac
 	if providerSpec.Value == nil {
 		return nil, errors.New("no such providerSpec found in manifest")
 	}
-
 	var config OvirtMachineProviderSpec
 	if err := yaml.Unmarshal(providerSpec.Value.Raw, &config); err != nil {
 		return nil, err

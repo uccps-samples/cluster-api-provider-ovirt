@@ -6,11 +6,21 @@ import (
 	ovirtC "github.com/openshift/cluster-api-provider-ovirt/pkg/clients/ovirt"
 	apierrors "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	ovirtsdk "github.com/ovirt/go-ovirt"
+	"github.com/pkg/errors"
+)
+
+const (
+	ErrorInvalidMachineObject = "error validating machine object fields"
+	noHugePages               = 0
+	hugePages2M               = 2048
+	hugePages1GB              = 1048576
+	autoPiningPolicyDisabled  = "disabled"
+	autoPiningPolicyAdjust    = "adjust"
 )
 
 // validateMachine validates the machine object yaml fields and
 // returns InvalidMachineConfiguration in case the validation failed
-func validateMachine(ovirtClient ovirtC.OvirtClient, config *ovirtconfigv1.OvirtMachineProviderSpec) *apierrors.MachineError {
+func validateMachine(ovirtClient ovirtC.Client, config *ovirtconfigv1.OvirtMachineProviderSpec) *apierrors.MachineError {
 	// UserDataSecret
 	if config.UserDataSecret == nil {
 		return apierrors.InvalidMachineConfiguration(
@@ -96,7 +106,7 @@ func validateVirtualMachineType(vmtype string) *apierrors.MachineError {
 // Returns: nil or error
 func validateHugepages(value int32) error {
 	switch value {
-	case 0, 2048, 1048576:
+	case noHugePages, hugePages2M, hugePages1GB:
 		return nil
 	default:
 		return fmt.Errorf(
@@ -107,8 +117,8 @@ func validateHugepages(value int32) error {
 }
 
 // autoPinningSupported will check if the engine's version is relevant for the feature.
-func autoPinningSupported(ovirtClient ovirtC.OvirtClient, config *ovirtconfigv1.OvirtMachineProviderSpec) error {
-	err := validateAutPinningPolicyValue(config.AutoPinningPolicy)
+func autoPinningSupported(ovirtClient ovirtC.Client, config *ovirtconfigv1.OvirtMachineProviderSpec) error {
+	err := validateAutoPinningPolicyValue(config.AutoPinningPolicy)
 	if err != nil {
 		return err
 	}
@@ -138,9 +148,9 @@ func autoPinningSupported(ovirtClient ovirtC.OvirtClient, config *ovirtconfigv1.
 // validateAutPinningPolicyValue execute validations regarding the
 // Virtual Machine auto pinning policy (disabled, existing, adjust).
 // Returns: nil or error
-func validateAutPinningPolicyValue(autopinningpolicy string) error {
+func validateAutoPinningPolicyValue(autopinningpolicy string) error {
 	switch autopinningpolicy {
-	case "disabled", "existing", "adjust":
+	case autoPiningPolicyDisabled, autoPiningPolicyAdjust:
 		return nil
 	default:
 		return fmt.Errorf(
@@ -150,7 +160,8 @@ func validateAutPinningPolicyValue(autopinningpolicy string) error {
 	}
 }
 
-// versionCompare will take two *ovirtsdk.Version and compare the two
+// versionCompare will take two *ovirtsdk.Version and compare the then
+// 1 - is returned if v > other
 func versionCompare(v *ovirtsdk.Version, other *ovirtsdk.Version) (int64, error) {
 	if v == nil || other == nil {
 		return 5, fmt.Errorf("can't compare nil objects")

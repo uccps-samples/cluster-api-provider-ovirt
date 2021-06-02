@@ -19,11 +19,15 @@ import (
 
 var _ reconcile.Reconciler = &providerIDController{}
 
+const (
+	controllerName = "ProviderIDController"
+)
+
 type providerIDController struct {
 	common.BaseController
-	listNodesByFieldFunc func(key, value string) ([]corev1.Node, error)
 }
 
+// Reconcile implements controller runtime Reconciler interface.
 func (r *providerIDController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
 	r.Log.Info("ProviderIDController, Reconciling", "Node", request.NamespacedName)
 
@@ -59,6 +63,7 @@ func (r *providerIDController) Reconcile(ctx context.Context, request reconcile.
 	return reconcile.Result{}, nil
 }
 
+// fetchOvirtVmID returns the id of the oVirt VM which correlates to the node
 func (r *providerIDController) fetchOvirtVmID(nodeName string) (string, error) {
 	c, err := r.GetConnection()
 	if err != nil {
@@ -66,7 +71,7 @@ func (r *providerIDController) fetchOvirtVmID(nodeName string) (string, error) {
 	}
 	ovirtC := ovirtClient.NewOvirtClient(c)
 
-	vm, err := ovirtC.GetVmByName(nodeName)
+	vm, err := ovirtC.GetVMByName(nodeName)
 	if err != nil {
 		r.Log.Error(err, "Error occurred will searching VM", "VM name", nodeName)
 		return "", err
@@ -77,18 +82,14 @@ func (r *providerIDController) fetchOvirtVmID(nodeName string) (string, error) {
 	return vm.MustId(), nil
 }
 
-func Add(mgr manager.Manager, opts manager.Options) error {
-	pic, err := NewProviderIDController(mgr)
-
-	if err != nil {
-		return fmt.Errorf("error building ProviderIDController: %v", err)
-	}
-
-	c, err := controller.New("ProviderIDController", mgr, controller.Options{Reconciler: pic})
+// Creates a new ProviderID Controller and adds it to the manager
+// The ProviderID Controller watches changes on Node objects in the cluster
+func Add(mgr manager.Manager) error {
+	pic := NewProviderIDController(mgr)
+	c, err := controller.New(controllerName, mgr, controller.Options{Reconciler: pic})
 	if err != nil {
 		return err
 	}
-
 	//Watch node changes
 	err = c.Watch(&source.Kind{Type: &corev1.Node{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
@@ -98,12 +99,12 @@ func Add(mgr manager.Manager, opts manager.Options) error {
 	return nil
 }
 
-func NewProviderIDController(mgr manager.Manager) (*providerIDController, error) {
+func NewProviderIDController(mgr manager.Manager) *providerIDController {
 	log.SetLogger(klogr.New())
 	return &providerIDController{
 		BaseController: common.BaseController{
-			Log:    log.Log.WithName("controllers").WithName("providerIDController"),
+			Log:    log.Log.WithName("controllers").WithName(controllerName),
 			Client: mgr.GetClient(),
 		},
-	}, nil
+	}
 }

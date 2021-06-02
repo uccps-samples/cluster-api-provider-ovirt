@@ -154,8 +154,8 @@ func main() {
 
 	capimachine.AddWithActuator(mgr, machineActuator)
 
-	providerIDcontroller.Add(mgr, manager.Options{})
-	nodeController.Add(mgr, manager.Options{})
+	providerIDcontroller.Add(mgr)
+	nodeController.Add(mgr)
 
 	if err := mgr.AddReadyzCheck("ping", healthz.Ping); err != nil {
 		klog.Fatal(err)

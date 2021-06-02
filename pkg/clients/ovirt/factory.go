@@ -4,11 +4,7 @@ import (
 	ovirtsdk "github.com/ovirt/go-ovirt"
 )
 
-type ovirtClient struct {
-	connection *ovirtsdk.Connection
-}
-
-func NewOvirtClient(conn *ovirtsdk.Connection) OvirtClient {
+func NewOvirtClient(conn *ovirtsdk.Connection) Client {
 	return &ovirtClient{
 		connection: conn,
 	}

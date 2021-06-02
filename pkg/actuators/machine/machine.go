@@ -23,13 +23,12 @@ import (
 
 const (
 	InstanceStatusAnnotationKey = "machine.openshift.io/instance-state"
-	ErrorInvalidMachineObject   = "error validating machine object fields"
 	userDataSecretKey           = "userData"
 )
 
 type machineScope struct {
 	context.Context
-	ovirtClient         ovirtC.OvirtClient
+	ovirtClient         ovirtC.Client
 	client              client.Client
 	osClient            osclientset.Interface
 	machine             *machinev1.Machine
@@ -39,12 +38,11 @@ type machineScope struct {
 
 func newMachineScope(
 	ctx context.Context,
-	ovirtClient ovirtC.OvirtClient,
+	ovirtClient ovirtC.Client,
 	client client.Client,
 	machinesClient v1beta1.MachineV1beta1Interface,
 	machine *machinev1.Machine,
 	providerSpec *ovirtconfigv1.OvirtMachineProviderSpec) *machineScope {
-
 	config := ctrl.GetConfigOrDie()
 	osClient := osclientset.NewForConfigOrDie(rest.AddUserAgent(config, "cluster-api-provider-ovirt"))
 	return &machineScope{
@@ -58,13 +56,13 @@ func newMachineScope(
 	}
 }
 
-// create creates machine if it does not exists.
+// create creates an oVirt VM from the machine object if it does not exists.
 func (ms *machineScope) create() error {
 	if vErr := validateMachine(ms.ovirtClient, ms.machineProviderSpec); vErr != nil {
 		return vErr
 	}
 	// creating a new instance, we don't have the vm id yet
-	instance, err := ms.ovirtClient.GetVmByName(ms.machine.Name)
+	instance, err := ms.ovirtClient.GetVMByName(ms.machine.Name)
 	if err != nil {
 		return err
 	}
@@ -79,7 +77,11 @@ func (ms *machineScope) create() error {
 		return apierrors.CreateMachine("Error getting VM ignition: %v", err)
 	}
 
-	instance, err = ms.ovirtClient.CreateVmByMachine(ms.machine, ignition, ms.machineProviderSpec)
+	instance, err = ms.ovirtClient.CreateVMByMachine(
+		ms.machine.Name,
+		ms.machine.Labels["machine.openshift.io/cluster-api-cluster"],
+		ignition,
+		ms.machineProviderSpec)
 	if err != nil {
 		return fmt.Errorf("Error creating Ovirt instance: %v", err)
 	}
@@ -87,8 +89,8 @@ func (ms *machineScope) create() error {
 	// Wait till ready
 	// TODO: export to a regular function
 	// TODO: Why are we always setting error to nil?!
-	err = util.PollImmediate(RetryIntervalInstanceStatus, TimeoutInstanceCreate, func() (bool, error) {
-		instance, err := ms.ovirtClient.GetVmByMachine(*ms.machine)
+	err = util.PollImmediate(retryIntervalInstanceStatus, timeoutInstanceCreate, func() (bool, error) {
+		instance, err := ms.ovirtClient.GetVMByMachine(*ms.machine)
 		if err != nil {
 			return false, nil
 		}
@@ -106,8 +108,9 @@ func (ms *machineScope) create() error {
 
 	// Wait till running
 	// TODO: export to a regular function
-	err = util.PollImmediate(RetryIntervalInstanceStatus, TimeoutInstanceCreate, func() (bool, error) {
-		instance, err := ms.ovirtClient.GetVmByMachine(*ms.machine)
+	// TODO: Why are we always setting error to nil?!
+	err = util.PollImmediate(retryIntervalInstanceStatus, timeoutInstanceCreate, func() (bool, error) {
+		instance, err := ms.ovirtClient.GetVMByMachine(*ms.machine)
 		if err != nil {
 			return false, nil
 		}
@@ -121,15 +124,16 @@ func (ms *machineScope) create() error {
 
 // exists returns true if machine exists.
 func (ms *machineScope) exists() (bool, error) {
-	instance, err := ms.ovirtClient.GetVmByMachine(*ms.machine)
+	instance, err := ms.ovirtClient.GetVMByMachine(*ms.machine)
 	if err != nil {
 		return false, err
 	}
 	return instance != nil, err
 }
 
+// delete deletes the VM which corresponds with the machine object from the oVirt engine
 func (ms *machineScope) delete() error {
-	instance, err := ms.ovirtClient.GetVmByMachine(*ms.machine)
+	instance, err := ms.ovirtClient.GetVMByMachine(*ms.machine)
 	if err != nil {
 		return err
 	}
@@ -137,11 +141,13 @@ func (ms *machineScope) delete() error {
 		klog.Infof("Skipped deleting a VM that is already deleted.\n")
 		return nil
 	}
-
 	return ms.ovirtClient.DeleteVM(instance.MustId())
 }
 
 // returns the ignition from the userData secret
+// Ignition is the utility that is used by RHCOS to manipulate disks during initial configuration.
+// Ignition completes common disk tasks, including partitioning disks, formatting partitions, writing files,
+// and configuring users. For more details see Openshift/RHCOS Docs
 func (ms *machineScope) getIgnition() ([]byte, error) {
 	if ms.machineProviderSpec == nil || ms.machineProviderSpec.UserDataSecret == nil {
 		return nil, nil
@@ -162,7 +168,7 @@ func (ms *machineScope) getIgnition() ([]byte, error) {
 }
 
 func (ms *machineScope) patchMachine(ctx context.Context, condition ovirtconfigv1.OvirtMachineProviderCondition) error {
-	instance, err := ms.ovirtClient.GetVmByMachine(*ms.machine)
+	instance, err := ms.ovirtClient.GetVMByMachine(*ms.machine)
 	if err != nil {
 		return err
 	}
@@ -218,16 +224,16 @@ func (ms *machineScope) reconcileMachineNetwork(ctx context.Context, instance *o
 	name := instance.MustName()
 	addresses := []corev1.NodeAddress{{Address: name, Type: corev1.NodeInternalDNS}}
 
-	vmId := instance.MustId()
+	vmID := instance.MustId()
 	klog.V(5).Infof("using oVirt SDK to find %s IP addresses", name)
 
-	//get API and ingress addresses that will be excluded from the node address selection
+	// get API and ingress addresses that will be excluded from the node address selection
 	excludeAddr, err := ms.getClusterAddress(ctx)
 	if err != nil {
 		return err
 	}
 
-	ip, err := ms.ovirtClient.FindVirtualMachineIP(vmId, excludeAddr)
+	ip, err := ms.ovirtClient.FindVirtualMachineIP(vmID, excludeAddr)
 
 	if err != nil {
 		// stop reconciliation till we get IP addresses - otherwise the state will be considered stable.
@@ -282,7 +288,7 @@ func (ms *machineScope) reconcileMachineProviderID(instance *ovirtC.Instance) {
 	if ms.machine.ObjectMeta.Annotations == nil {
 		ms.machine.ObjectMeta.Annotations = make(map[string]string)
 	}
-	ms.machine.ObjectMeta.Annotations[utils.OvirtIdAnnotationKey] = id
+	ms.machine.ObjectMeta.Annotations[utils.OvirtIDAnnotationKey] = id
 }
 
 func (ms *machineScope) reconcileMachineAnnotations(instance *ovirtC.Instance) {
@@ -295,7 +301,6 @@ func (ms *machineScope) reconcileMachineAnnotations(instance *ovirtC.Instance) {
 func (ms *machineScope) reconcileMachineConditions(
 	conditions []ovirtconfigv1.OvirtMachineProviderCondition,
 	newCondition ovirtconfigv1.OvirtMachineProviderCondition) []ovirtconfigv1.OvirtMachineProviderCondition {
-
 	if conditions == nil {
 		now := metav1.Now()
 		newCondition.LastProbeTime = now

@@ -33,8 +33,9 @@ import (
 )
 
 const (
-	TimeoutInstanceCreate       = 5 * time.Minute
-	RetryIntervalInstanceStatus = 10 * time.Second
+	timeoutInstanceCreate       = 5 * time.Minute
+	retryIntervalInstanceStatus = 10 * time.Second
+	userAgent                   = "cluster-api-provider-ovirt"
 )
 
 // ActuatorParams holds parameter information for Actuator
@@ -47,6 +48,7 @@ type ActuatorParams struct {
 	EventRecorder  record.EventRecorder
 }
 
+// OvirtActuator is responsible for performing machine reconciliation on oVirt platform.
 type OvirtActuator struct {
 	params          ActuatorParams
 	scheme          *runtime.Scheme
@@ -58,9 +60,10 @@ type OvirtActuator struct {
 	OSClient        osclientset.Interface
 }
 
+// NewActuator returns an Ovirt Actuator.
 func NewActuator(params ActuatorParams) (*OvirtActuator, error) {
 	config := ctrl.GetConfigOrDie()
-	osClient := osclientset.NewForConfigOrDie(rest.AddUserAgent(config, "cluster-api-provider-ovirt"))
+	osClient := osclientset.NewForConfigOrDie(rest.AddUserAgent(config, userAgent))
 
 	return &OvirtActuator{
 		params:          params,
@@ -74,7 +77,9 @@ func NewActuator(params ActuatorParams) (*OvirtActuator, error) {
 	}, nil
 }
 
-// Create creates a machine(oVirt VM) and is invoked by the machine controller.
+// Create creates a VM on oVirt platform from the machine object and is invoked by the machine controller.
+// Machine should be a valid machine object, in case a validation error occurs an InvalidMachineConfiguration
+// error is returned and the Machine object will move to Failed state
 func (actuator *OvirtActuator) Create(ctx context.Context, machine *machinev1.Machine) error {
 	providerSpec, err := ovirtconfigv1.ProviderSpecFromRawExtension(machine.Spec.ProviderSpec.Value)
 	if err != nil {
@@ -185,7 +190,7 @@ func (actuator *OvirtActuator) handleMachineError(machine *machinev1.Machine, re
 	return err
 }
 
-//getConnection returns a a client to oVirt's API endpoint
+// getConnection returns a a client to oVirt's API endpoint
 func (actuator *OvirtActuator) getConnection() (*ovirtsdk.Connection, error) {
 	var err error
 	if actuator.ovirtConnection == nil || actuator.ovirtConnection.Test() != nil {
@@ -194,7 +199,7 @@ func (actuator *OvirtActuator) getConnection() (*ovirtsdk.Connection, error) {
 			return nil, fmt.Errorf("failed getting credentials for namespace %s, %s", utils.NAMESPACE, err)
 		}
 		// session expired or some other error, re-login.
-		actuator.ovirtConnection, err = ovirtC.CreateApiConnection(creds)
+		actuator.ovirtConnection, err = ovirtC.CreateAPIConnection(creds)
 		if err != nil {
 			return nil, fmt.Errorf("failed getting credentials for namespace %s, %s", utils.NAMESPACE, err)
 		}
@@ -211,6 +216,7 @@ func conditionSuccess() ovirtconfigv1.OvirtMachineProviderCondition {
 	}
 }
 
+// TODO: USE IT
 func conditionFailed() ovirtconfigv1.OvirtMachineProviderCondition {
 	return ovirtconfigv1.OvirtMachineProviderCondition{
 		Type:    ovirtconfigv1.MachineCreated,

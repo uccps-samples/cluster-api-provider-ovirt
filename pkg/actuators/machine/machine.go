@@ -4,55 +4,52 @@ import (
 	"context"
 	"fmt"
 
-	osclientset "github.com/openshift/client-go/config/clientset/versioned"
+	configv1 "github.com/openshift/api/config/v1"
 	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
 	ovirtC "github.com/openshift/cluster-api-provider-ovirt/pkg/clients/ovirt"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
 	machinev1 "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
-	"github.com/openshift/machine-api-operator/pkg/generated/clientset/versioned/typed/machine/v1beta1"
 	"github.com/openshift/machine-api-operator/pkg/util"
 	ovirtsdk "github.com/ovirt/go-ovirt"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/rest"
 	"k8s.io/klog"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
 	InstanceStatusAnnotationKey = "machine.openshift.io/instance-state"
 	userDataSecretKey           = "userData"
+	// GlobalInfrastuctureName default name for infrastructure object
+	globalInfrastuctureName = "cluster"
 )
 
 type machineScope struct {
 	context.Context
-	ovirtClient         ovirtC.Client
-	client              client.Client
-	osClient            osclientset.Interface
-	machine             *machinev1.Machine
-	machinesClient      v1beta1.MachineV1beta1Interface
-	machineProviderSpec *ovirtconfigv1.OvirtMachineProviderSpec
+	ovirtClient ovirtC.Client
+	client      client.Client
+	machine     *machinev1.Machine
+	// originalMachineToBePatched contains a patch copy of the machine when the machine scope was created
+	// it is used by k8sclient to understand the diff and patch the machine object
+	originalMachineToBePatched client.Patch
+	machineProviderSpec        *ovirtconfigv1.OvirtMachineProviderSpec
 }
 
 func newMachineScope(
 	ctx context.Context,
 	ovirtClient ovirtC.Client,
-	client client.Client,
-	machinesClient v1beta1.MachineV1beta1Interface,
+	c client.Client,
 	machine *machinev1.Machine,
 	providerSpec *ovirtconfigv1.OvirtMachineProviderSpec) *machineScope {
-	config := ctrl.GetConfigOrDie()
-	osClient := osclientset.NewForConfigOrDie(rest.AddUserAgent(config, "cluster-api-provider-ovirt"))
+
 	return &machineScope{
-		Context:             ctx,
-		ovirtClient:         ovirtClient,
-		client:              client,
-		machinesClient:      machinesClient,
-		machine:             machine,
-		machineProviderSpec: providerSpec,
-		osClient:            osClient,
+		Context:                    ctx,
+		ovirtClient:                ovirtClient,
+		client:                     c,
+		machine:                    machine,
+		originalMachineToBePatched: client.MergeFrom(machine.DeepCopy()),
+		machineProviderSpec:        providerSpec,
 	}
 }
 
@@ -187,16 +184,18 @@ func (ms *machineScope) patchMachine(ctx context.Context, condition ovirtconfigv
 	statusCopy := *ms.machine.Status.DeepCopy()
 	klog.Info("Updating machine resource")
 
-	// TODO the namespace should be set on actuator creation. Remove the hardcoded openshift-machine-api.
-	newMachine, err := ms.machinesClient.Machines("openshift-machine-api").Update(context.TODO(), ms.machine, metav1.UpdateOptions{})
-	if err != nil {
-		return errors.Wrap(err, "error updating machine object")
+	if err := ms.client.Patch(ctx, ms.machine, ms.originalMachineToBePatched); err != nil {
+		klog.Errorf("Failed to patch machine %q: %v", ms.machine.GetName(), err)
+		return err
 	}
 
-	newMachine.Status = statusCopy
+	ms.machine.Status = statusCopy
+
+	// patch status
 	klog.Info("Updating machine status sub-resource")
-	if _, err := ms.machinesClient.Machines("openshift-machine-api").UpdateStatus(context.TODO(), newMachine, metav1.UpdateOptions{}); err != nil {
-		return errors.Wrap(err, "error updating machine object status")
+	if err := ms.client.Status().Patch(ctx, ms.machine, ms.originalMachineToBePatched); err != nil {
+		klog.Errorf("Failed to patch machine status %q: %v", ms.machine.GetName(), err)
+		return err
 	}
 	return nil
 }
@@ -243,10 +242,10 @@ func (ms *machineScope) reconcileMachineNetwork(ctx context.Context, instance *o
 }
 
 func (ms *machineScope) getClusterAddress(ctx context.Context) (map[string]int, error) {
-	infra, err := ms.osClient.ConfigV1().Infrastructures().Get(ctx, "cluster", metav1.GetOptions{})
-	if err != nil {
-		klog.Error(err, "Failed to retrieve Cluster details")
-		return nil, errors.Wrap(err, "error retrieving cluster details")
+	infra := &configv1.Infrastructure{}
+	objKey := client.ObjectKey{Name: globalInfrastuctureName}
+	if err := ms.client.Get(ctx, objKey, infra); err != nil {
+		return nil, errors.Wrap(err, "error getting infrastucture data")
 	}
 
 	var clusterAddr = make(map[string]int)

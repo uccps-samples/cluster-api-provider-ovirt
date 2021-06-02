@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"time"
 
-	osclientset "github.com/openshift/client-go/config/clientset/versioned"
 	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
 	ovirtC "github.com/openshift/cluster-api-provider-ovirt/pkg/clients/ovirt"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
@@ -21,25 +20,20 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/klog"
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 const (
 	timeoutInstanceCreate       = 5 * time.Minute
 	retryIntervalInstanceStatus = 10 * time.Second
-	userAgent                   = "cluster-api-provider-ovirt"
 )
 
 // ActuatorParams holds parameter information for Actuator
 type ActuatorParams struct {
 	Namespace      string
 	Client         client.Client
-	KubeClient     *kubernetes.Clientset
 	Scheme         *runtime.Scheme
 	MachinesClient v1beta1.MachineV1beta1Interface
 	EventRecorder  record.EventRecorder
@@ -50,28 +44,19 @@ type OvirtActuator struct {
 	params          ActuatorParams
 	scheme          *runtime.Scheme
 	client          client.Client
-	kubeClient      *kubernetes.Clientset
-	machinesClient  v1beta1.MachineV1beta1Interface
 	eventRecorder   record.EventRecorder
 	ovirtConnection *ovirtsdk.Connection
-	osClient        osclientset.Interface
 }
 
 // NewActuator returns an Ovirt Actuator.
-func NewActuator(params ActuatorParams) (*OvirtActuator, error) {
-	config := ctrl.GetConfigOrDie()
-	osClient := osclientset.NewForConfigOrDie(rest.AddUserAgent(config, userAgent))
-
+func NewActuator(params ActuatorParams) *OvirtActuator {
 	return &OvirtActuator{
 		params:          params,
 		client:          params.Client,
-		machinesClient:  params.MachinesClient,
 		scheme:          params.Scheme,
-		kubeClient:      params.KubeClient,
 		eventRecorder:   params.EventRecorder,
 		ovirtConnection: nil,
-		osClient:        osClient,
-	}, nil
+	}
 }
 
 // Create creates a VM on oVirt platform from the machine object and is invoked by the machine controller.
@@ -91,7 +76,7 @@ func (actuator *OvirtActuator) Create(ctx context.Context, machine *machinev1.Ma
 	}
 
 	ovirtClient := ovirtC.NewOvirtClient(connection)
-	mScope := newMachineScope(ctx, ovirtClient, actuator.client, actuator.machinesClient, machine, providerSpec)
+	mScope := newMachineScope(ctx, ovirtClient, actuator.client, machine, providerSpec)
 
 	if vErr := validateMachine(ovirtClient, providerSpec); vErr != nil {
 		return vErr
@@ -118,7 +103,8 @@ func (actuator *OvirtActuator) Exists(ctx context.Context, machine *machinev1.Ma
 		return false, errors.Wrap(err, "failed to create connection to oVirt API")
 	}
 	ovirtClient := ovirtC.NewOvirtClient(connection)
-	mScope := newMachineScope(ctx, ovirtClient, actuator.client, actuator.machinesClient, machine, nil)
+	mScope := newMachineScope(ctx, ovirtClient, actuator.client, machine, nil)
+
 	return mScope.exists()
 }
 
@@ -139,7 +125,7 @@ func (actuator *OvirtActuator) Update(ctx context.Context, machine *machinev1.Ma
 	}
 
 	ovirtClient := ovirtC.NewOvirtClient(connection)
-	mScope := newMachineScope(ctx, ovirtClient, actuator.client, actuator.machinesClient, machine, providerSpec)
+	mScope := newMachineScope(ctx, ovirtClient, actuator.client, machine, providerSpec)
 	if err := mScope.patchMachine(ctx, conditionSuccess()); err != nil {
 		return actuator.handleMachineError(machine, "Update", apierrors.UpdateMachine(
 			"Error patching Machine %v", err))
@@ -153,10 +139,10 @@ func (actuator *OvirtActuator) Update(ctx context.Context, machine *machinev1.Ma
 func (actuator *OvirtActuator) Delete(ctx context.Context, machine *machinev1.Machine) error {
 	connection, err := actuator.getConnection()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "failed to create connection to oVirt API")
 	}
 	ovirtClient := ovirtC.NewOvirtClient(connection)
-	mScope := newMachineScope(ctx, ovirtClient, actuator.client, actuator.machinesClient, machine, nil)
+	mScope := newMachineScope(ctx, ovirtClient, actuator.client, machine, nil)
 	if err := mScope.delete(); err != nil {
 		return actuator.handleMachineError(machine, "Deleted", apierrors.UpdateMachine(
 			"error deleting Ovirt instance %v", err))

@@ -5,4 +5,5 @@ const (
 	ProviderIDPrefix          = "ovirt://"
 	OvirtCloudCredsSecretName = "ovirt-credentials"
 	NAMESPACE                 = "openshift-machine-api"
+	UserAgent                 = "cluster-api-provider-ovirt"
 )

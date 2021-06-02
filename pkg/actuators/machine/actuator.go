@@ -50,11 +50,11 @@ type OvirtActuator struct {
 	params          ActuatorParams
 	scheme          *runtime.Scheme
 	client          client.Client
-	KubeClient      *kubernetes.Clientset
+	kubeClient      *kubernetes.Clientset
 	machinesClient  v1beta1.MachineV1beta1Interface
-	EventRecorder   record.EventRecorder
+	eventRecorder   record.EventRecorder
 	ovirtConnection *ovirtsdk.Connection
-	OSClient        osclientset.Interface
+	osClient        osclientset.Interface
 }
 
 // NewActuator returns an Ovirt Actuator.
@@ -67,10 +67,10 @@ func NewActuator(params ActuatorParams) (*OvirtActuator, error) {
 		client:          params.Client,
 		machinesClient:  params.MachinesClient,
 		scheme:          params.Scheme,
-		KubeClient:      params.KubeClient,
-		EventRecorder:   params.EventRecorder,
+		kubeClient:      params.KubeClient,
+		eventRecorder:   params.EventRecorder,
 		ovirtConnection: nil,
-		OSClient:        osClient,
+		osClient:        osClient,
 	}, nil
 }
 
@@ -106,7 +106,7 @@ func (actuator *OvirtActuator) Create(ctx context.Context, machine *machinev1.Ma
 			"Error patching Machine %v", err))
 		return err
 	}
-	actuator.EventRecorder.Eventf(machine, corev1.EventTypeNormal, "Created", "Updated Machine %v", machine.Name)
+	actuator.eventRecorder.Eventf(machine, corev1.EventTypeNormal, "Created", "Updated Machine %v", machine.Name)
 	return nil
 }
 
@@ -147,7 +147,7 @@ func (actuator *OvirtActuator) Update(ctx context.Context, machine *machinev1.Ma
 		return err
 	}
 
-	actuator.EventRecorder.Eventf(machine, corev1.EventTypeNormal, "Update", "Updated Machine %v", machine.Name)
+	actuator.eventRecorder.Eventf(machine, corev1.EventTypeNormal, "Update", "Updated Machine %v", machine.Name)
 	return nil
 }
 
@@ -164,7 +164,7 @@ func (actuator *OvirtActuator) Delete(ctx context.Context, machine *machinev1.Ma
 			"error deleting Ovirt instance %v", err))
 		return err
 	}
-	actuator.EventRecorder.Eventf(machine, corev1.EventTypeNormal, "Deleted", "Deleted Machine %v", machine.Name)
+	actuator.eventRecorder.Eventf(machine, corev1.EventTypeNormal, "Deleted", "Deleted Machine %v", machine.Name)
 	return nil
 }
 
@@ -173,7 +173,7 @@ func (actuator *OvirtActuator) Delete(ctx context.Context, machine *machinev1.Ma
 // cluster installation, it will operate as a no-op. It also returns the
 // original error for convenience, so callers can do "return handleMachineError(...)".
 func (actuator *OvirtActuator) handleMachineError(machine *machinev1.Machine, reason string, err *apierrors.MachineError) error {
-	actuator.EventRecorder.Eventf(machine, corev1.EventTypeWarning, reason, "%v", err)
+	actuator.eventRecorder.Eventf(machine, corev1.EventTypeWarning, reason, "%v", err)
 
 	if actuator.client != nil {
 		machine.Status.ErrorReason = &err.Reason

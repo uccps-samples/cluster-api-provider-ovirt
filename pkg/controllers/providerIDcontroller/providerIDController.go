@@ -41,28 +41,29 @@ func (r *providerIDController) Reconcile(ctx context.Context, request reconcile.
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			return reconcile.Result{}, nil
+			return common.ResultNoRequeue(), nil
 		}
 		// Error reading the object - requeue the request.
-		return reconcile.Result{}, fmt.Errorf("error getting node: %v", err)
+		return common.ResultRequeueDefault(), errors.Wrap(err, "error getting node: %v")
 	}
 	if node.Spec.ProviderID == "" {
 		r.Log.Info("Node spec.ProviderID is empty, fetching from ovirt", "node", node.Name)
 		id, err := r.fetchOvirtVmID(node.Name)
 		if err != nil {
-			return reconcile.Result{}, fmt.Errorf("failed getting VM from oVirt: %v", err)
+			return common.ResultRequeueDefault(),
+				fmt.Errorf("failed getting VM %s from oVirt requeue: %w", node.Name, err)
 		}
 		if id == "" {
 			r.Log.Info("Node not found in oVirt", "node", node.Name)
-			return reconcile.Result{}, nil
+			return common.ResultNoRequeue(), nil
 		}
 		node.Spec.ProviderID = utils.ProviderIDPrefix + id
 		err = r.Client.Update(ctx, &node)
 		if err != nil {
-			return reconcile.Result{}, fmt.Errorf("failed updating node %s: %v", node.Name, err)
+			return common.ResultRequeueDefault(), fmt.Errorf("failed updating node %s: %w", node.Name, err)
 		}
 	}
-	return reconcile.Result{}, nil
+	return common.ResultNoRequeue(), nil
 }
 
 // fetchOvirtVmID returns the id of the oVirt VM which correlates to the node

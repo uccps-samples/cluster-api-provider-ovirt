@@ -12,6 +12,20 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
+const requeueDefaultTime = 30 * time.Second
+
+func ResultRequeueAfter(sec int) reconcile.Result {
+	return reconcile.Result{RequeueAfter: time.Duration(sec) * time.Second}
+}
+
+func ResultRequeueDefault() reconcile.Result {
+	return reconcile.Result{RequeueAfter: requeueDefaultTime}
+}
+
+func ResultNoRequeue() reconcile.Result {
+	return reconcile.Result{Requeue: false}
+}
+
 type BaseController struct {
 	Log             logr.Logger
 	Client          client.Client

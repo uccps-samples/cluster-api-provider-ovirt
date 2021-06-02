@@ -43,36 +43,39 @@ func (r *nodeController) Reconcile(ctx context.Context, request reconcile.Reques
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
-			return reconcile.Result{}, nil
+			return common.ResultNoRequeue(), nil
 		}
 		// Error reading the object - requeue the request.
-		return reconcile.Result{}, fmt.Errorf("error getting node: %v", err)
+		return common.ResultRequeueDefault(), errors.Wrap(err, "error getting node requeue")
 	}
+	// Check if the node has a ovirt ProviderID set, if not then ignore it
 	if !strings.Contains(node.Spec.ProviderID, utils.ProviderIDPrefix) {
-		return reconcile.Result{}, nil
+		return common.ResultNoRequeue(), nil
 	}
 	c, err := r.GetConnection()
 	if err != nil {
-		return reconcile.Result{}, err
+		return common.ResultRequeueDefault(),
+			errors.Wrap(err, "error getting connection to oVirt, requeue")
 	}
 	ovirtC := ovirtClient.NewOvirtClient(c)
 	vm, err := ovirtC.GetVMByName(node.Name)
 	if err != nil {
-		return reconcile.Result{}, fmt.Errorf("failed getting VM from oVirt: %v", err)
+		return common.ResultRequeueDefault(),
+			fmt.Errorf("failed getting VM %s from oVirt, requeue: %w", node.Name, err)
 	} else if vm == nil {
 		// Node doesn't exist in oVirt platform, deleting node object
 		r.Log.Info(
 			"Deleting Node from cluster since it has been removed from the oVirt engine",
 			"Node", node.Name)
 		if err := r.Client.Delete(ctx, &node); err != nil {
-			return reconcile.Result{}, fmt.Errorf("Error deleting node: %v, error is: %v", node.Name, err)
+			return common.ResultRequeueDefault(), fmt.Errorf("error deleting node: %v, error: %w", node.Name, err)
 		}
 	} else if vm.MustStatus() == ovirtsdk.VMSTATUS_DOWN {
 		r.Log.Info("Node VM status is Down, requeuing for 1 min",
 			"Node", node.Name, "Vm Status", ovirtsdk.VMSTATUS_DOWN)
-		return reconcile.Result{Requeue: true, RequeueAfter: RETRY_INTERVAL_VM_DOWN}, nil
+		return common.ResultRequeueAfter(retryIntervalVMDownSec), nil
 	}
-	return reconcile.Result{}, nil
+	return common.ResultNoRequeue(), nil
 }
 
 // Creates a new Node Controller and adds it to the manager

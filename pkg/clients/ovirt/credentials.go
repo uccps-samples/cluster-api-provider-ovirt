@@ -37,9 +37,11 @@ func GetCredentialsSecret(coreClient client.Client, namespace string, secretName
 
 	if err := coreClient.Get(context.Background(), key, &credentialsSecret); err != nil {
 		if errors.IsNotFound(err) {
-			return nil, fmt.Errorf("error getting credentials secret %q in namespace %q: %v", secretName, namespace, err)
+			return nil, fmt.Errorf(
+				"error credentials secret %s not found in namespace %s: %w", secretName, namespace, err)
 		}
-		return nil, err
+		return nil, fmt.Errorf(
+			"error getting credentials secret %s in namespace %s: %w", secretName, namespace, err)
 	}
 
 	o := Creds{}

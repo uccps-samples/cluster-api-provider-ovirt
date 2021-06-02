@@ -37,7 +37,7 @@ func (r *providerIDController) Reconcile(ctx context.Context, request reconcile.
 	node := corev1.Node{}
 	err := r.Client.Get(ctx, request.NamespacedName, &node)
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
@@ -69,14 +69,14 @@ func (r *providerIDController) Reconcile(ctx context.Context, request reconcile.
 func (r *providerIDController) fetchOvirtVmID(nodeName string) (string, error) {
 	c, err := r.GetConnection()
 	if err != nil {
-		return "", err
+		return "", errors.Wrap(err, "error getting connection to oVirt")
 	}
 	ovirtC := ovirtClient.NewOvirtClient(c)
 
 	vm, err := ovirtC.GetVMByName(nodeName)
 	if err != nil {
 		r.Log.Error(err, "Error occurred will searching VM", "VM name", nodeName)
-		return "", err
+		return "", fmt.Errorf("failed getting VM %s from oVirt: %w", nodeName, err)
 	}
 	if vm == nil {
 		return "", nil
@@ -90,14 +90,13 @@ func Add(mgr manager.Manager) error {
 	pic := NewProviderIDController(mgr)
 	c, err := controller.New(controllerName, mgr, controller.Options{Reconciler: pic})
 	if err != nil {
-		return err
+		return errors.Wrap(err, "error setting up watch on node changes")
 	}
 	//Watch node changes
 	err = c.Watch(&source.Kind{Type: &corev1.Node{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
 		return err
 	}
-
 	return nil
 }
 

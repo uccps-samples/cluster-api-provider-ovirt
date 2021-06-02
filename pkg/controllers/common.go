@@ -19,14 +19,16 @@ type BaseController struct {
 }
 
 func (b *BaseController) GetConnection() (*ovirtsdk.Connection, error) {
-	var err error
 	if b.ovirtConnection == nil || b.ovirtConnection.Test() != nil {
 		creds, err := ovirtClient.GetCredentialsSecret(b.Client, utils.NAMESPACE, utils.OvirtCloudCredsSecretName)
 		if err != nil {
-			return nil, fmt.Errorf("failed getting credentials for namespace %s, %s", utils.NAMESPACE, err)
+			return nil, fmt.Errorf("failed getting credentials for namespace %s, %w", utils.NAMESPACE, err)
 		}
 		// session expired or some other error, re-login.
-		b.ovirtConnection, err = ovirtClient.CreateApiConnection(creds)
+		b.ovirtConnection, err = ovirtClient.CreateAPIConnection(creds)
+		if err != nil {
+			return nil, fmt.Errorf("failed creating ovirt connection %w", err)
+		}
 	}
-	return b.ovirtConnection, err
+	return b.ovirtConnection, nil
 }

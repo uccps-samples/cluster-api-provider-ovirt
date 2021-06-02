@@ -39,7 +39,7 @@ func (r *nodeController) Reconcile(ctx context.Context, request reconcile.Reques
 	node := corev1.Node{}
 	err := r.Client.Get(ctx, request.NamespacedName, &node)
 	if err != nil {
-		if errors.IsNotFound(err) {
+		if apierrors.IsNotFound(err) {
 			// Request object not found, could have been deleted after reconcile request.
 			// Owned objects are automatically garbage collected. For additional cleanup logic use finalizers.
 			// Return and don't requeue
@@ -81,12 +81,12 @@ func Add(mgr manager.Manager) error {
 	nc := NewNodeController(mgr)
 	c, err := controller.New(controllerName, mgr, controller.Options{Reconciler: nc})
 	if err != nil {
-		return err
+		return errors.Wrap(err, "error creating node controller")
 	}
 	//Watch node changes
 	err = c.Watch(&source.Kind{Type: &corev1.Node{}}, &handler.EnqueueRequestForObject{})
 	if err != nil {
-		return err
+		return errors.Wrap(err, "error setting up watch on node changes")
 	}
 
 	return nil

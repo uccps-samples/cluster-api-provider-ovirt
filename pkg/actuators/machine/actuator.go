@@ -116,12 +116,9 @@ func (actuator *OvirtActuator) Exists(ctx context.Context, machine *machinev1.Ma
 	klog.Infof("Checking machine %v exists.\n", machine.Name)
 	connection, err := actuator.getConnection()
 	if err != nil {
-		return false, fmt.Errorf("failed to create connection to oVirt API")
+		return false, errors.Wrap(err, "failed to create connection to oVirt API")
 	}
 	ovirtClient := ovirtC.NewOvirtClient(connection)
-	if err != nil {
-		return false, err
-	}
 	mScope := newMachineScope(ctx, ovirtClient, actuator.client, actuator.machinesClient, machine, nil)
 	return mScope.exists()
 }
@@ -182,7 +179,7 @@ func (actuator *OvirtActuator) handleMachineError(machine *machinev1.Machine, re
 		machine.Status.ErrorReason = &err.Reason
 		machine.Status.ErrorMessage = &err.Message
 		if err := actuator.client.Update(context.TODO(), machine); err != nil {
-			return fmt.Errorf("unable to update machine status: %v", err)
+			return errors.Wrap(err, "unable to update machine status")
 		}
 	}
 
@@ -192,19 +189,18 @@ func (actuator *OvirtActuator) handleMachineError(machine *machinev1.Machine, re
 
 // getConnection returns a a client to oVirt's API endpoint
 func (actuator *OvirtActuator) getConnection() (*ovirtsdk.Connection, error) {
-	var err error
 	if actuator.ovirtConnection == nil || actuator.ovirtConnection.Test() != nil {
 		creds, err := ovirtC.GetCredentialsSecret(actuator.client, utils.NAMESPACE, utils.OvirtCloudCredsSecretName)
 		if err != nil {
-			return nil, fmt.Errorf("failed getting credentials for namespace %s, %s", utils.NAMESPACE, err)
+			return nil, fmt.Errorf("failed getting credentials for namespace %s, %w", utils.NAMESPACE, err)
 		}
 		// session expired or some other error, re-login.
 		actuator.ovirtConnection, err = ovirtC.CreateAPIConnection(creds)
 		if err != nil {
-			return nil, fmt.Errorf("failed getting credentials for namespace %s, %s", utils.NAMESPACE, err)
+			return nil, errors.Wrap(err, "failed creating ovirt connection")
 		}
 	}
-	return actuator.ovirtConnection, err
+	return actuator.ovirtConnection, nil
 }
 
 func conditionSuccess() ovirtconfigv1.OvirtMachineProviderCondition {

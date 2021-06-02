@@ -33,7 +33,8 @@ func validateMachine(ovirtClient ovirtC.Client, config *ovirtconfigv1.OvirtMachi
 
 	err := validateInstanceID(config)
 	if err != nil {
-		return err
+		return apierrors.InvalidMachineConfiguration(
+			fmt.Sprintf("error validating InstanceID %v", err))
 	}
 
 	// root disk of the node
@@ -47,7 +48,8 @@ func validateMachine(ovirtClient ovirtC.Client, config *ovirtconfigv1.OvirtMachi
 
 	err = validateVirtualMachineType(config.VMType)
 	if err != nil {
-		return err
+		return apierrors.InvalidMachineConfiguration(
+			fmt.Sprintf("error validating Machine Type %v", err))
 	}
 
 	if config.AutoPinningPolicy != "" {
@@ -64,21 +66,19 @@ func validateMachine(ovirtClient ovirtC.Client, config *ovirtconfigv1.OvirtMachi
 
 // validateInstanceID execute validations regarding the InstanceID.
 // Returns: nil or InvalidMachineConfiguration
-func validateInstanceID(config *ovirtconfigv1.OvirtMachineProviderSpec) *apierrors.MachineError {
+func validateInstanceID(config *ovirtconfigv1.OvirtMachineProviderSpec) error {
 	// Cannot set InstanceTypeID and at same time: MemoryMB OR CPU
 	if len(config.InstanceTypeId) != 0 {
 		if config.MemoryMB != 0 || config.CPU != nil {
-			return apierrors.InvalidMachineConfiguration(
-				fmt.Sprintf("%s InstanceTypeID and MemoryMB OR CPU cannot be set at the same time!", ErrorInvalidMachineObject))
+			return fmt.Errorf(
+				"%s InstanceTypeID and MemoryMB OR CPU cannot be set at the same time", ErrorInvalidMachineObject)
 		}
 	} else {
 		if config.MemoryMB == 0 {
-			return apierrors.InvalidMachineConfiguration(
-				fmt.Sprintf("%s MemoryMB must be specified!", ErrorInvalidMachineObject))
+			return fmt.Errorf("%s MemoryMB must be specified", ErrorInvalidMachineObject)
 		}
 		if config.CPU == nil {
-			return apierrors.InvalidMachineConfiguration(
-				fmt.Sprintf("%s CPU must be specified!", ErrorInvalidMachineObject))
+			return fmt.Errorf("%s CPU must be specified", ErrorInvalidMachineObject)
 		}
 	}
 	return nil
@@ -87,7 +87,7 @@ func validateInstanceID(config *ovirtconfigv1.OvirtMachineProviderSpec) *apierro
 // validateVirtualMachineType execute validations regarding the
 // Virtual Machine type (desktop, server, high_performance).
 // Returns: nil or InvalidMachineConfiguration
-func validateVirtualMachineType(vmtype string) *apierrors.MachineError {
+func validateVirtualMachineType(vmtype string) error {
 	if len(vmtype) == 0 {
 		return apierrors.InvalidMachineConfiguration("VMType (keyword: type in YAML) must be specified")
 	}
@@ -95,7 +95,7 @@ func validateVirtualMachineType(vmtype string) *apierrors.MachineError {
 	case "server", "high_performance", "desktop":
 		return nil
 	default:
-		return apierrors.InvalidMachineConfiguration(
+		return fmt.Errorf(
 			"error creating oVirt instance: The machine type must "+
 				"be one of the following options: "+
 				"server, high_performance or desktop. The value: %s is not valid", vmtype)
@@ -121,12 +121,12 @@ func validateHugepages(value int32) error {
 func autoPinningSupported(ovirtClient ovirtC.Client, config *ovirtconfigv1.OvirtMachineProviderSpec) error {
 	err := validateAutoPinningPolicyValue(config.AutoPinningPolicy)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "error validating auto pinning policy")
 	}
 	// TODO: remove the version check when everyone uses engine 4.4.5
 	engineVer, err := ovirtClient.GetEngineVersion()
 	if err != nil {
-		return err
+		return errors.Wrap(err, "error finding engine version")
 	}
 	autoPiningRequiredEngineVersion := ovirtsdk.NewVersionBuilder().
 		Major(4).
@@ -136,7 +136,7 @@ func autoPinningSupported(ovirtClient ovirtC.Client, config *ovirtconfigv1.Ovirt
 		MustBuild()
 	versionCompareResult, err := versionCompare(engineVer, autoPiningRequiredEngineVersion)
 	if err != nil {
-		return err
+		return errors.Wrap(err, "error comparing engine versions")
 	}
 	// The version is OK.
 	if versionCompareResult >= 0 {

@@ -58,9 +58,6 @@ func newMachineScope(
 
 // create creates an oVirt VM from the machine object if it does not exists.
 func (ms *machineScope) create() error {
-	if vErr := validateMachine(ms.ovirtClient, ms.machineProviderSpec); vErr != nil {
-		return vErr
-	}
 	// creating a new instance, we don't have the vm id yet
 	instance, err := ms.ovirtClient.GetVMByName(ms.machine.Name)
 	if err != nil {

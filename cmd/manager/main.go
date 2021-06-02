@@ -22,18 +22,15 @@ import (
 	"os"
 	"time"
 
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/klog"
-
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/actuators/machine"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/apis"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/controllers/nodeController"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/controllers/providerIDcontroller"
-
 	machinev1 "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 	capimachine "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	clientset "github.com/openshift/machine-api-operator/pkg/generated/clientset/versioned"
-
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	logz "sigs.k8s.io/controller-runtime/pkg/log/zap"

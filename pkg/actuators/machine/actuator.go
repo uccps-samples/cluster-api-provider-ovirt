@@ -8,26 +8,23 @@ package machine
 import (
 	"context"
 	"fmt"
-	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
 	"time"
-
-	"k8s.io/client-go/rest"
-
-	machinev1 "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
-	apierrors "github.com/openshift/machine-api-operator/pkg/controller/machine"
-	"github.com/openshift/machine-api-operator/pkg/generated/clientset/versioned/typed/machine/v1beta1"
-
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/tools/record"
-	"k8s.io/klog"
 
 	osclientset "github.com/openshift/client-go/config/clientset/versioned"
 	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
 	ovirtC "github.com/openshift/cluster-api-provider-ovirt/pkg/clients/ovirt"
+	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
+	machinev1 "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
+	apierrors "github.com/openshift/machine-api-operator/pkg/controller/machine"
+	"github.com/openshift/machine-api-operator/pkg/generated/clientset/versioned/typed/machine/v1beta1"
 	ovirtsdk "github.com/ovirt/go-ovirt"
-
+	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/kubernetes"
+	"k8s.io/client-go/rest"
+	"k8s.io/client-go/tools/record"
+	"k8s.io/klog"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )

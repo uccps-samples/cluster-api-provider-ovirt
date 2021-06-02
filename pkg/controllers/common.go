@@ -2,12 +2,14 @@ package ovirt
 
 import (
 	"fmt"
-	ovirtClient "github.com/openshift/cluster-api-provider-ovirt/pkg/clients/ovirt"
-	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
+	"time"
 
 	"github.com/go-logr/logr"
+	ovirtClient "github.com/openshift/cluster-api-provider-ovirt/pkg/clients/ovirt"
+	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
 	ovirtsdk "github.com/ovirt/go-ovirt"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
 
 type BaseController struct {

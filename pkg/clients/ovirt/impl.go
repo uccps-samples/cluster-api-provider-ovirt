@@ -7,20 +7,16 @@ package ovirt
 
 import (
 	"fmt"
-	apierrors "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	"math"
 	"regexp"
 	"time"
 
-	"github.com/pkg/errors"
-	"k8s.io/klog"
-
-	ovirtsdk "github.com/ovirt/go-ovirt"
-
+	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
 	machinev1 "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 	"github.com/openshift/machine-api-operator/pkg/util"
-
-	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
+	ovirtsdk "github.com/ovirt/go-ovirt"
+	"github.com/pkg/errors"
+	"k8s.io/klog"
 )
 
 var _ Client = (*ovirtClient)(nil)

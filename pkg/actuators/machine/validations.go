@@ -2,6 +2,7 @@ package machine
 
 import (
 	"fmt"
+
 	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
 	ovirtC "github.com/openshift/cluster-api-provider-ovirt/pkg/clients/ovirt"
 	apierrors "github.com/openshift/machine-api-operator/pkg/controller/machine"

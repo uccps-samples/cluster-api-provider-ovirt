@@ -3,16 +3,16 @@ package machine
 import (
 	"context"
 	"fmt"
-	"github.com/openshift/machine-api-operator/pkg/util"
 
 	osclientset "github.com/openshift/client-go/config/clientset/versioned"
 	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
 	ovirtC "github.com/openshift/cluster-api-provider-ovirt/pkg/clients/ovirt"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
 	machinev1 "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
-	apierrors "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	"github.com/openshift/machine-api-operator/pkg/generated/clientset/versioned/typed/machine/v1beta1"
+	"github.com/openshift/machine-api-operator/pkg/util"
 	ovirtsdk "github.com/ovirt/go-ovirt"
+	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/rest"

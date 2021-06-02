@@ -3,22 +3,22 @@ package nodeController
 import (
 	"context"
 	"fmt"
+	"strings"
+
 	ovirtClient "github.com/openshift/cluster-api-provider-ovirt/pkg/clients/ovirt"
+	common "github.com/openshift/cluster-api-provider-ovirt/pkg/controllers"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
+	ovirtsdk "github.com/ovirt/go-ovirt"
+	"github.com/pkg/errors"
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/klog/klogr"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
-	"sigs.k8s.io/controller-runtime/pkg/source"
-	"strings"
-	"time"
-
-	common "github.com/openshift/cluster-api-provider-ovirt/pkg/controllers"
-	ovirtsdk "github.com/ovirt/go-ovirt"
-	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/source"
 )
 
 var _ reconcile.Reconciler = &nodeController{}

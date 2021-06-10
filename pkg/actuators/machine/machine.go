@@ -279,10 +279,6 @@ func (ms *machineScope) reconcileMachineProviderID(instance *ovirtC.Instance) {
 	providerID := utils.ProviderIDPrefix + id
 	ms.machine.Spec.ProviderID = &providerID
 
-	if ms.machine.ObjectMeta.Annotations == nil {
-		ms.machine.ObjectMeta.Annotations = make(map[string]string)
-	}
-	ms.machine.ObjectMeta.Annotations[utils.OvirtIDAnnotationKey] = id
 }
 
 func (ms *machineScope) reconcileMachineAnnotations(instance *ovirtC.Instance) {
@@ -290,6 +286,7 @@ func (ms *machineScope) reconcileMachineAnnotations(instance *ovirtC.Instance) {
 		ms.machine.ObjectMeta.Annotations = make(map[string]string)
 	}
 	ms.machine.ObjectMeta.Annotations[InstanceStatusAnnotationKey] = string(instance.MustStatus())
+	ms.machine.ObjectMeta.Annotations[utils.OvirtIDAnnotationKey] = instance.MustId()
 }
 
 func (ms *machineScope) reconcileMachineConditions(

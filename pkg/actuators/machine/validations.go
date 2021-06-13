@@ -5,7 +5,6 @@ import (
 
 	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
 	ovirtC "github.com/openshift/cluster-api-provider-ovirt/pkg/clients/ovirt"
-	apierrors "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	ovirtsdk "github.com/ovirt/go-ovirt"
 	"github.com/pkg/errors"
 )
@@ -21,45 +20,39 @@ const (
 
 // validateMachine validates the machine object yaml fields and
 // returns InvalidMachineConfiguration in case the validation failed
-func validateMachine(ovirtClient ovirtC.Client, config *ovirtconfigv1.OvirtMachineProviderSpec) *apierrors.MachineError {
+func validateMachine(ovirtClient ovirtC.Client, config *ovirtconfigv1.OvirtMachineProviderSpec) error {
 	// UserDataSecret
 	if config.UserDataSecret == nil {
-		return apierrors.InvalidMachineConfiguration(
-			fmt.Sprintf("%s UserDataSecret must be provided!", ErrorInvalidMachineObject))
+		return fmt.Errorf("%s UserDataSecret must be provided!", ErrorInvalidMachineObject)
 	} else if config.UserDataSecret.Name == "" {
-		return apierrors.InvalidMachineConfiguration(
-			fmt.Sprintf("%s UserDataSecret *Name* must be provided!", ErrorInvalidMachineObject))
+		return fmt.Errorf("%s UserDataSecret *Name* must be provided!", ErrorInvalidMachineObject)
 	}
 
 	err := validateInstanceID(config)
 	if err != nil {
-		return apierrors.InvalidMachineConfiguration(
-			fmt.Sprintf("error validating InstanceID %v", err))
+		return fmt.Errorf("error validating InstanceID %v", err)
 	}
 
 	// root disk of the node
 	if config.OSDisk == nil {
-		return apierrors.InvalidMachineConfiguration(
-			fmt.Sprintf("%s OS Disk (os_disk) must be specified!", ErrorInvalidMachineObject))
+		return fmt.Errorf("%s OS Disk (os_disk) must be specified!", ErrorInvalidMachineObject)
 	} else if config.OSDisk.SizeGB == 0 {
-		return apierrors.InvalidMachineConfiguration(
-			fmt.Sprintf("%s OS Disk (os_disk) *SizeGB* must be specified!", ErrorInvalidMachineObject))
+		return fmt.Errorf("%s OS Disk (os_disk) *SizeGB* must be specified!", ErrorInvalidMachineObject)
 	}
 
 	err = validateVirtualMachineType(config.VMType)
 	if err != nil {
-		return apierrors.InvalidMachineConfiguration(
-			fmt.Sprintf("error validating Machine Type %v", err))
+		return fmt.Errorf("error validating Machine Type %w", err)
 	}
 
 	if config.AutoPinningPolicy != "" {
 		err := autoPinningSupported(ovirtClient, config)
 		if err != nil {
-			return apierrors.InvalidMachineConfiguration(fmt.Sprintf("%s", err))
+			return errors.Wrap(err, "error validating AutoPinningPolicy")
 		}
 	}
 	if err := validateHugepages(config.Hugepages); err != nil {
-		return apierrors.InvalidMachineConfiguration(fmt.Sprintf("%s", err))
+		return errors.Wrap(err, "error validating Hugepages")
 	}
 	return nil
 }
@@ -89,7 +82,7 @@ func validateInstanceID(config *ovirtconfigv1.OvirtMachineProviderSpec) error {
 // Returns: nil or InvalidMachineConfiguration
 func validateVirtualMachineType(vmtype string) error {
 	if len(vmtype) == 0 {
-		return apierrors.InvalidMachineConfiguration("VMType (keyword: type in YAML) must be specified")
+		return fmt.Errorf("VMType (keyword: type in YAML) must be specified")
 	}
 	switch vmtype {
 	case "server", "high_performance", "desktop":

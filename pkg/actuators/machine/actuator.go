@@ -78,8 +78,9 @@ func (actuator *OvirtActuator) Create(ctx context.Context, machine *machinev1.Ma
 	ovirtClient := ovirtC.NewOvirtClient(connection)
 	mScope := newMachineScope(ctx, ovirtClient, actuator.client, machine, providerSpec)
 
-	if vErr := validateMachine(ovirtClient, providerSpec); vErr != nil {
-		return vErr
+	if err := validateMachine(ovirtClient, providerSpec); err != nil {
+		return actuator.handleMachineError(machine, "Create", apierrors.InvalidMachineConfiguration(
+			"failed to create connection to oVirt API: %v", err))
 	}
 	if err := mScope.create(); err != nil {
 		return actuator.handleMachineError(machine, "Create", apierrors.CreateMachine(

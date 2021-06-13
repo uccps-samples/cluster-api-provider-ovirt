@@ -76,37 +76,28 @@ func (actuator *OvirtActuator) Create(ctx context.Context, machine *machinev1.Ma
 	}
 
 	ovirtClient := ovirtC.NewOvirtClient(connection)
-	mScope := newMachineScope(ctx, ovirtClient, actuator.client, machine, providerSpec)
 
 	if err := validateMachine(ovirtClient, providerSpec); err != nil {
 		return actuator.handleMachineError(machine, "Create", apierrors.InvalidMachineConfiguration(
 			"failed to create connection to oVirt API: %v", err))
 	}
+
+	mScope := newMachineScope(ctx, ovirtClient, actuator.client, machine, providerSpec)
 	if err := mScope.create(); err != nil {
+		mScope.reconcileMachineProviderStatus(nil, nil, conditionFailed())
 		return actuator.handleMachineError(machine, "Create", apierrors.CreateMachine(
 			"Error creating Machine %v", err))
 	}
-
-	if err := mScope.patchMachine(ctx, conditionSuccess()); err != nil {
+	if err := mScope.reconcileMachine(ctx, conditionSuccess()); err != nil {
+		return actuator.handleMachineError(machine, "Create", apierrors.CreateMachine(
+			"Error reconciling Machine %v", err))
+	}
+	if err := mScope.patchMachine(ctx); err != nil {
 		return actuator.handleMachineError(machine, "Create", apierrors.CreateMachine(
 			"Error patching Machine %v", err))
 	}
 	actuator.eventRecorder.Eventf(machine, corev1.EventTypeNormal, "Created", "Updated Machine %v", machine.Name)
 	return nil
-}
-
-// Exists determines if the given machine currently exists.
-// A machine which is not terminated is considered as existing.
-func (actuator *OvirtActuator) Exists(ctx context.Context, machine *machinev1.Machine) (bool, error) {
-	klog.Infof("Checking machine %v exists.\n", machine.Name)
-	connection, err := actuator.getConnection()
-	if err != nil {
-		return false, errors.Wrap(err, "failed to create connection to oVirt API")
-	}
-	ovirtClient := ovirtC.NewOvirtClient(connection)
-	mScope := newMachineScope(ctx, ovirtClient, actuator.client, machine, nil)
-
-	return mScope.exists()
 }
 
 // Update attempts to sync machine state with an existing instance.
@@ -127,13 +118,33 @@ func (actuator *OvirtActuator) Update(ctx context.Context, machine *machinev1.Ma
 
 	ovirtClient := ovirtC.NewOvirtClient(connection)
 	mScope := newMachineScope(ctx, ovirtClient, actuator.client, machine, providerSpec)
-	if err := mScope.patchMachine(ctx, conditionSuccess()); err != nil {
+
+	if err := mScope.reconcileMachine(ctx, conditionSuccess()); err != nil {
+		return actuator.handleMachineError(machine, "Update", apierrors.UpdateMachine(
+			"Error reconciling Machine %v", err))
+	}
+
+	if err := mScope.patchMachine(ctx); err != nil {
 		return actuator.handleMachineError(machine, "Update", apierrors.UpdateMachine(
 			"Error patching Machine %v", err))
 	}
 
 	actuator.eventRecorder.Eventf(machine, corev1.EventTypeNormal, "Update", "Updated Machine %v", machine.Name)
 	return nil
+}
+
+// Exists determines if the given machine currently exists.
+// A machine which is not terminated is considered as existing.
+func (actuator *OvirtActuator) Exists(ctx context.Context, machine *machinev1.Machine) (bool, error) {
+	klog.Infof("Checking machine %v exists.\n", machine.Name)
+	connection, err := actuator.getConnection()
+	if err != nil {
+		return false, errors.Wrap(err, "failed to create connection to oVirt API")
+	}
+	ovirtClient := ovirtC.NewOvirtClient(connection)
+	mScope := newMachineScope(ctx, ovirtClient, actuator.client, machine, nil)
+
+	return mScope.exists()
 }
 
 // Update deletes the VM from the RHV environment

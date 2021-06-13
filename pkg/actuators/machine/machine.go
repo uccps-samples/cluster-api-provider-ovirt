@@ -161,24 +161,30 @@ func (ms *machineScope) getIgnition() ([]byte, error) {
 	return userData, nil
 }
 
-func (ms *machineScope) patchMachine(ctx context.Context, condition ovirtconfigv1.OvirtMachineProviderCondition) error {
+func (ms *machineScope) reconcileMachine(ctx context.Context, condition ovirtconfigv1.OvirtMachineProviderCondition) error {
 	instance, err := ms.ovirtClient.GetVMByMachine(*ms.machine)
 	if err != nil {
 		return errors.Wrap(err, "error finding VM by name")
 	}
-	ms.reconcileMachineProviderID(instance)
-	klog.V(5).Infof("Machine %s provider status %s", instance.MustName(), instance.MustStatus())
+	id := instance.MustId()
+	status := string(instance.MustStatus())
+	name := instance.MustName()
+	ms.reconcileMachineProviderID(id)
+	klog.V(5).Infof("Machine %s provider status %s", instance.MustName(), status)
 
-	err = ms.reconcileMachineNetwork(ctx, instance)
+	err = ms.reconcileMachineNetwork(ctx, instance.MustStatus(), name, id)
 	if err != nil {
 		return errors.Wrap(err, "error reconciling machine network")
 	}
-	ms.reconcileMachineAnnotations(instance)
-	err = ms.reconcileMachineProviderStatus(instance, condition)
+	ms.reconcileMachineAnnotations(status, id)
+	err = ms.reconcileMachineProviderStatus(&status, &id, condition)
 	if err != nil {
 		return errors.Wrap(err, "error reconciling machine provider status")
 	}
+	return nil
+}
 
+func (ms *machineScope) patchMachine(ctx context.Context) error {
 	// Copy the status, because its discarded and returned fresh from the DB by the machine resource update.
 	// Save it for the status sub-resource update.
 	statusCopy := *ms.machine.Status.DeepCopy()
@@ -200,8 +206,9 @@ func (ms *machineScope) patchMachine(ctx context.Context, condition ovirtconfigv
 	return nil
 }
 
-func (ms *machineScope) reconcileMachineNetwork(ctx context.Context, instance *ovirtC.Instance) error {
-	switch instance.MustStatus() {
+func (ms *machineScope) reconcileMachineNetwork(ctx context.Context, status ovirtsdk.VmStatus,
+	name string, vmID string) error {
+	switch status {
 	// expect IP addresses only on those statuses.
 	// in those statuses we 'll try reconciling
 	case ovirtsdk.VMSTATUS_UP, ovirtsdk.VMSTATUS_MIGRATING:
@@ -212,13 +219,10 @@ func (ms *machineScope) reconcileMachineNetwork(ctx context.Context, instance *o
 	// return error if vm is transient state this will force retry reconciling until VM is up.
 	// there is no event generated that will trigger this.  BZ1854787
 	default:
-		return fmt.Errorf(
-			"requeuing reconciliation, VM %s state is %s", instance.MustName(), instance.MustStatus())
+		return fmt.Errorf("requeuing reconciliation, VM %s state is %s", name, status)
 	}
-	name := instance.MustName()
 	addresses := []corev1.NodeAddress{{Address: name, Type: corev1.NodeInternalDNS}}
 
-	vmID := instance.MustId()
 	klog.V(5).Infof("using oVirt SDK to find %s IP addresses", name)
 
 	// get API and ingress addresses that will be excluded from the node address selection
@@ -255,16 +259,13 @@ func (ms *machineScope) getClusterAddress(ctx context.Context) (map[string]int, 
 	return clusterAddr, nil
 }
 
-func (ms *machineScope) reconcileMachineProviderStatus(instance *ovirtC.Instance, condition ovirtconfigv1.OvirtMachineProviderCondition) error {
-	status := string(instance.MustStatus())
-	name := instance.MustId()
-
+func (ms *machineScope) reconcileMachineProviderStatus(status *string, id *string, condition ovirtconfigv1.OvirtMachineProviderCondition) error {
 	providerStatus, err := ovirtconfigv1.ProviderStatusFromRawExtension(ms.machine.Status.ProviderStatus)
 	if err != nil {
 		return errors.Wrap(err, "error unmarshaling machine ProviderStatus field")
 	}
-	providerStatus.InstanceState = &status
-	providerStatus.InstanceID = &name
+	providerStatus.InstanceState = status
+	providerStatus.InstanceID = id
 	providerStatus.Conditions = ms.reconcileMachineConditions(providerStatus.Conditions, condition)
 	rawExtension, err := ovirtconfigv1.RawExtensionFromProviderStatus(providerStatus)
 	if err != nil {
@@ -274,19 +275,17 @@ func (ms *machineScope) reconcileMachineProviderStatus(instance *ovirtC.Instance
 	return nil
 }
 
-func (ms *machineScope) reconcileMachineProviderID(instance *ovirtC.Instance) {
-	id := instance.MustId()
+func (ms *machineScope) reconcileMachineProviderID(id string) {
 	providerID := utils.ProviderIDPrefix + id
 	ms.machine.Spec.ProviderID = &providerID
-
 }
 
-func (ms *machineScope) reconcileMachineAnnotations(instance *ovirtC.Instance) {
+func (ms *machineScope) reconcileMachineAnnotations(status string, id string) {
 	if ms.machine.ObjectMeta.Annotations == nil {
 		ms.machine.ObjectMeta.Annotations = make(map[string]string)
 	}
-	ms.machine.ObjectMeta.Annotations[InstanceStatusAnnotationKey] = string(instance.MustStatus())
-	ms.machine.ObjectMeta.Annotations[utils.OvirtIDAnnotationKey] = instance.MustId()
+	ms.machine.ObjectMeta.Annotations[InstanceStatusAnnotationKey] = status
+	ms.machine.ObjectMeta.Annotations[utils.OvirtIDAnnotationKey] = id
 }
 
 // reconcileMachineConditions returns the conditions that will be set for the machine

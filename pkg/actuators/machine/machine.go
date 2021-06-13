@@ -289,29 +289,48 @@ func (ms *machineScope) reconcileMachineAnnotations(instance *ovirtC.Instance) {
 	ms.machine.ObjectMeta.Annotations[utils.OvirtIDAnnotationKey] = instance.MustId()
 }
 
+// reconcileMachineConditions returns the conditions that will be set for the machine
+// If the machine does not already have a condition with the specified type, a condition will be added to the slice
+// If the machine does already have a condition with the specified type, the condition will be updated
 func (ms *machineScope) reconcileMachineConditions(
-	conditions []ovirtconfigv1.OvirtMachineProviderCondition,
+	currentConditions []ovirtconfigv1.OvirtMachineProviderCondition,
 	newCondition ovirtconfigv1.OvirtMachineProviderCondition) []ovirtconfigv1.OvirtMachineProviderCondition {
-	if conditions == nil {
+
+	if existingCondition := findProviderConditionByType(currentConditions, newCondition.Type); existingCondition == nil {
+		// If there is no condition with the same type then add the new condition
 		now := metav1.Now()
 		newCondition.LastProbeTime = now
 		newCondition.LastTransitionTime = now
-		return []ovirtconfigv1.OvirtMachineProviderCondition{newCondition}
+		currentConditions = append(currentConditions, newCondition)
+	} else {
+		updateExistingCondition(&newCondition, existingCondition)
 	}
+	return currentConditions
+}
 
-	for _, c := range conditions {
-		if c.Type == newCondition.Type {
-			if c.Reason != newCondition.Reason || c.Message != newCondition.Message {
-				if c.Status != newCondition.Status {
-					newCondition.LastTransitionTime = metav1.Now()
-				}
-				c.Status = newCondition.Status
-				c.Message = newCondition.Message
-				c.Reason = newCondition.Reason
-				c.LastProbeTime = newCondition.LastProbeTime
-				return conditions
-			}
+func findProviderConditionByType(conditions []ovirtconfigv1.OvirtMachineProviderCondition, conditionType ovirtconfigv1.OvirtMachineProviderConditionType) *ovirtconfigv1.OvirtMachineProviderCondition {
+	for i := range conditions {
+		if conditions[i].Type == conditionType {
+			return &conditions[i]
 		}
 	}
-	return conditions
+	return nil
+}
+
+func updateExistingCondition(newCondition, existingCondition *ovirtconfigv1.OvirtMachineProviderCondition) {
+	if !shouldUpdateCondition(newCondition, existingCondition) {
+		return
+	}
+
+	if existingCondition.Status != newCondition.Status {
+		existingCondition.LastTransitionTime = metav1.Now()
+	}
+	existingCondition.Status = newCondition.Status
+	existingCondition.Reason = newCondition.Reason
+	existingCondition.Message = newCondition.Message
+	existingCondition.LastProbeTime = newCondition.LastProbeTime
+}
+
+func shouldUpdateCondition(newCondition, existingCondition *ovirtconfigv1.OvirtMachineProviderCondition) bool {
+	return newCondition.Reason != existingCondition.Reason || newCondition.Message != existingCondition.Message
 }

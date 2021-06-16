@@ -60,7 +60,6 @@ func (ms *machineScope) create() error {
 	if err != nil {
 		return errors.Wrap(err, "error finding VM by name")
 	}
-	// TODO: Handle that case in the actuator and make sure to return or at least check the impact on patch machine
 	if instance != nil {
 		klog.Infof("Skipped creating a VM that already exists.\n")
 		return nil
@@ -81,15 +80,7 @@ func (ms *machineScope) create() error {
 	}
 
 	// Wait till ready
-	// TODO: export to a regular function
-	// TODO: Why are we always setting error to nil?!
-	err = util.PollImmediate(retryIntervalInstanceStatus, timeoutInstanceCreate, func() (bool, error) {
-		instance, err := ms.ovirtClient.GetVMByMachine(*ms.machine)
-		if err != nil {
-			return false, nil
-		}
-		return instance.MustStatus() == ovirtsdk.VMSTATUS_DOWN, nil
-	})
+	err = ms.waitTillVMReachStatus(ovirtsdk.VMSTATUS_DOWN)
 	if err != nil {
 		return errors.Wrap(err, "error creating oVirt VM")
 	}
@@ -101,19 +92,21 @@ func (ms *machineScope) create() error {
 	}
 
 	// Wait till running
-	// TODO: export to a regular function
-	// TODO: Why are we always setting error to nil?!
-	err = util.PollImmediate(retryIntervalInstanceStatus, timeoutInstanceCreate, func() (bool, error) {
-		instance, err := ms.ovirtClient.GetVMByMachine(*ms.machine)
-		if err != nil {
-			return false, nil
-		}
-		return instance.MustStatus() == ovirtsdk.VMSTATUS_UP, nil
-	})
+	err = ms.waitTillVMReachStatus(ovirtsdk.VMSTATUS_UP)
 	if err != nil {
-		return errors.Wrap(err, "Error running oVirt VM")
+		return errors.Wrap(err, "Error waiting for oVirt VM to be UP")
 	}
 	return nil
+}
+
+func (ms *machineScope) waitTillVMReachStatus(status ovirtsdk.VmStatus) error {
+	return util.PollImmediate(retryIntervalInstanceStatus, timeoutInstanceCreate, func() (bool, error) {
+		instance, err := ms.ovirtClient.GetVMByMachine(*ms.machine)
+		if err != nil {
+			return false, err
+		}
+		return instance.MustStatus() == status, nil
+	})
 }
 
 // exists returns true if machine exists.

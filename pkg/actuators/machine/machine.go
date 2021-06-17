@@ -13,7 +13,6 @@ import (
 	ovirtsdk "github.com/ovirt/go-ovirt"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -154,7 +153,7 @@ func (ms *machineScope) getIgnition() ([]byte, error) {
 	return userData, nil
 }
 
-func (ms *machineScope) reconcileMachine(ctx context.Context, condition ovirtconfigv1.OvirtMachineProviderCondition) error {
+func (ms *machineScope) reconcileMachine(ctx context.Context) error {
 	instance, err := ms.ovirtClient.GetVMByMachine(*ms.machine)
 	if err != nil {
 		return errors.Wrap(err, "error finding VM by name")
@@ -163,14 +162,12 @@ func (ms *machineScope) reconcileMachine(ctx context.Context, condition ovirtcon
 	status := string(instance.MustStatus())
 	name := instance.MustName()
 	ms.reconcileMachineProviderID(id)
-	klog.V(5).Infof("Machine %s provider status %s", instance.MustName(), status)
-
+	ms.reconcileMachineAnnotations(status, id)
 	err = ms.reconcileMachineNetwork(ctx, instance.MustStatus(), name, id)
 	if err != nil {
 		return errors.Wrap(err, "error reconciling machine network")
 	}
-	ms.reconcileMachineAnnotations(status, id)
-	err = ms.reconcileMachineProviderStatus(&status, &id, condition)
+	err = ms.reconcileMachineProviderStatus(&status, &id)
 	if err != nil {
 		return errors.Wrap(err, "error reconciling machine provider status")
 	}
@@ -206,6 +203,7 @@ func (ms *machineScope) reconcileMachineNetwork(ctx context.Context, status ovir
 	// in those statuses we 'll try reconciling
 	case ovirtsdk.VMSTATUS_UP, ovirtsdk.VMSTATUS_MIGRATING:
 	// update machine status.
+	// TODO: Should we clean the addresses here?
 	case ovirtsdk.VMSTATUS_DOWN:
 		return nil
 
@@ -252,14 +250,13 @@ func (ms *machineScope) getClusterAddress(ctx context.Context) (map[string]int, 
 	return clusterAddr, nil
 }
 
-func (ms *machineScope) reconcileMachineProviderStatus(status *string, id *string, condition ovirtconfigv1.OvirtMachineProviderCondition) error {
+func (ms *machineScope) reconcileMachineProviderStatus(status *string, id *string) error {
 	providerStatus, err := ovirtconfigv1.ProviderStatusFromRawExtension(ms.machine.Status.ProviderStatus)
 	if err != nil {
 		return errors.Wrap(err, "error unmarshaling machine ProviderStatus field")
 	}
 	providerStatus.InstanceState = status
 	providerStatus.InstanceID = id
-	providerStatus.Conditions = ms.reconcileMachineConditions(providerStatus.Conditions, condition)
 	rawExtension, err := ovirtconfigv1.RawExtensionFromProviderStatus(providerStatus)
 	if err != nil {
 		return errors.Wrap(err, "error marshaling machine ProviderStatus field")
@@ -279,50 +276,4 @@ func (ms *machineScope) reconcileMachineAnnotations(status string, id string) {
 	}
 	ms.machine.ObjectMeta.Annotations[InstanceStatusAnnotationKey] = status
 	ms.machine.ObjectMeta.Annotations[utils.OvirtIDAnnotationKey] = id
-}
-
-// reconcileMachineConditions returns the conditions that will be set for the machine
-// If the machine does not already have a condition with the specified type, a condition will be added to the slice
-// If the machine does already have a condition with the specified type, the condition will be updated
-func (ms *machineScope) reconcileMachineConditions(
-	currentConditions []ovirtconfigv1.OvirtMachineProviderCondition,
-	newCondition ovirtconfigv1.OvirtMachineProviderCondition) []ovirtconfigv1.OvirtMachineProviderCondition {
-
-	if existingCondition := findProviderConditionByType(currentConditions, newCondition.Type); existingCondition == nil {
-		// If there is no condition with the same type then add the new condition
-		now := metav1.Now()
-		newCondition.LastProbeTime = now
-		newCondition.LastTransitionTime = now
-		currentConditions = append(currentConditions, newCondition)
-	} else {
-		updateExistingCondition(&newCondition, existingCondition)
-	}
-	return currentConditions
-}
-
-func findProviderConditionByType(conditions []ovirtconfigv1.OvirtMachineProviderCondition, conditionType ovirtconfigv1.OvirtMachineProviderConditionType) *ovirtconfigv1.OvirtMachineProviderCondition {
-	for i := range conditions {
-		if conditions[i].Type == conditionType {
-			return &conditions[i]
-		}
-	}
-	return nil
-}
-
-func updateExistingCondition(newCondition, existingCondition *ovirtconfigv1.OvirtMachineProviderCondition) {
-	if !shouldUpdateCondition(newCondition, existingCondition) {
-		return
-	}
-
-	if existingCondition.Status != newCondition.Status {
-		existingCondition.LastTransitionTime = metav1.Now()
-	}
-	existingCondition.Status = newCondition.Status
-	existingCondition.Reason = newCondition.Reason
-	existingCondition.Message = newCondition.Message
-	existingCondition.LastProbeTime = newCondition.LastProbeTime
-}
-
-func shouldUpdateCondition(newCondition, existingCondition *ovirtconfigv1.OvirtMachineProviderCondition) bool {
-	return newCondition.Reason != existingCondition.Reason || newCondition.Message != existingCondition.Message
 }

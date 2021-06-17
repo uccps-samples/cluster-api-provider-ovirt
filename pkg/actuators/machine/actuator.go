@@ -84,11 +84,10 @@ func (actuator *OvirtActuator) Create(ctx context.Context, machine *machinev1.Ma
 
 	mScope := newMachineScope(ctx, ovirtClient, actuator.client, machine, providerSpec)
 	if err := mScope.create(); err != nil {
-		mScope.reconcileMachineProviderStatus(nil, nil, conditionFailed())
 		return actuator.handleMachineError(machine, "Create", apierrors.CreateMachine(
 			"Error creating Machine %v", err))
 	}
-	if err := mScope.reconcileMachine(ctx, conditionSuccess()); err != nil {
+	if err := mScope.reconcileMachine(ctx); err != nil {
 		return actuator.handleMachineError(machine, "Create", apierrors.CreateMachine(
 			"Error reconciling Machine %v", err))
 	}
@@ -119,7 +118,7 @@ func (actuator *OvirtActuator) Update(ctx context.Context, machine *machinev1.Ma
 	ovirtClient := ovirtC.NewOvirtClient(connection)
 	mScope := newMachineScope(ctx, ovirtClient, actuator.client, machine, providerSpec)
 
-	if err := mScope.reconcileMachine(ctx, conditionSuccess()); err != nil {
+	if err := mScope.reconcileMachine(ctx); err != nil {
 		return actuator.handleMachineError(machine, "Update", apierrors.UpdateMachine(
 			"Error reconciling Machine %v", err))
 	}
@@ -196,23 +195,4 @@ func (actuator *OvirtActuator) getConnection() (*ovirtsdk.Connection, error) {
 		}
 	}
 	return actuator.ovirtConnection, nil
-}
-
-func conditionSuccess() ovirtconfigv1.OvirtMachineProviderCondition {
-	return ovirtconfigv1.OvirtMachineProviderCondition{
-		Type:    ovirtconfigv1.MachineCreated,
-		Status:  corev1.ConditionTrue,
-		Reason:  "MachineCreateSucceeded",
-		Message: "Machine successfully created",
-	}
-}
-
-// TODO: USE IT
-func conditionFailed() ovirtconfigv1.OvirtMachineProviderCondition {
-	return ovirtconfigv1.OvirtMachineProviderCondition{
-		Type:    ovirtconfigv1.MachineCreated,
-		Status:  corev1.ConditionFalse,
-		Reason:  "MachineCreateFailed",
-		Message: "Machine creation failed",
-	}
 }

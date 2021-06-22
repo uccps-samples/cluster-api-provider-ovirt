@@ -10,12 +10,12 @@ import (
 )
 
 const (
-	ErrorInvalidMachineObject = "error validating machine object fields"
-	noHugePages               = 0
-	hugePages2M               = 2048
-	hugePages1GB              = 1048576
-	autoPiningPolicyDisabled  = "disabled"
-	autoPiningPolicyAdjust    = "adjust"
+	ErrorInvalidMachineObject    = "error validating machine object fields"
+	noHugePages                  = 0
+	hugePages2M                  = 2048
+	hugePages1GB                 = 1048576
+	autoPiningPolicyNone         = "none"
+	autoPiningPolicyResizeAndPin = "resize_and_pin"
 )
 
 // validateMachine validates the machine object yaml fields and
@@ -140,17 +140,18 @@ func autoPinningSupported(ovirtClient ovirtC.Client, config *ovirtconfigv1.Ovirt
 }
 
 // validateAutPinningPolicyValue execute validations regarding the
-// Virtual Machine auto pinning policy (disabled, existing, adjust).
+// Virtual Machine auto pinning policy (none, resize_and_pin).
 // Returns: nil or error
 func validateAutoPinningPolicyValue(autopinningpolicy string) error {
 	switch autopinningpolicy {
-	case autoPiningPolicyDisabled, autoPiningPolicyAdjust:
+	case autoPiningPolicyNone, autoPiningPolicyResizeAndPin:
 		return nil
 	default:
 		return fmt.Errorf(
 			"error creating oVirt instance: The machine auto pinning policy must "+
 				"be one of the following options: "+
-				"disabled, existing or adjust. The value: %s is not valid", autopinningpolicy)
+				"none or resize_and_pin. "+
+				"The value: %s is not valid", autopinningpolicy)
 	}
 }
 

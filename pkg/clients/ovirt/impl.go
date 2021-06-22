@@ -73,7 +73,7 @@ func (is *ovirtClient) CreateVMByMachine(
 
 	isAutoPinning := false
 	if providerSpec.AutoPinningPolicy != "" {
-		autoPinningPolicy := ovirtsdk.AutoPinningPolicy(providerSpec.AutoPinningPolicy)
+		autoPinningPolicy := mapAutoPinningPolicy(providerSpec.AutoPinningPolicy)
 
 		// if we have a policy, we need to set the pinning to all the hosts in the cluster.
 		if autoPinningPolicy != ovirtsdk.AUTOPINNINGPOLICY_DISABLED {
@@ -137,7 +137,7 @@ func (is *ovirtClient) CreateVMByMachine(
 	}
 
 	if isAutoPinning {
-		err = is.handleAutoPinning(vmID, ovirtsdk.AutoPinningPolicy(providerSpec.AutoPinningPolicy))
+		err = is.handleAutoPinning(vmID, mapAutoPinningPolicy(providerSpec.AutoPinningPolicy))
 		if err != nil {
 			klog.Errorf("updating the VM (%s) with auto pinning policy failed! %v", vmID, err)
 		}
@@ -458,6 +458,17 @@ func (is *ovirtClient) handleAutoPinning(id string, autoPinningPolicy ovirtsdk.A
 		return errors.Errorf("failed to set the auto pinning policy on the VM!, %v", err)
 	}
 	return nil
+}
+
+func mapAutoPinningPolicy(policy string) ovirtsdk.AutoPinningPolicy {
+	switch policy {
+	case "none":
+		return ovirtsdk.AUTOPINNINGPOLICY_DISABLED
+	case "resize_and_pin":
+		return ovirtsdk.AUTOPINNINGPOLICY_ADJUST
+	default:
+		return ovirtsdk.AUTOPINNINGPOLICY_DISABLED
+	}
 }
 
 func (is *ovirtClient) GetEngineVersion() (*ovirtsdk.Version, error) {

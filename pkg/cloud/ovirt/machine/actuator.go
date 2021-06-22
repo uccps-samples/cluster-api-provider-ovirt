@@ -551,17 +551,18 @@ func (actuator *OvirtActuator) autoPinningSupported(machine *machinev1.Machine, 
 }
 
 // validateAutPinningPolicyValue execute validations regarding the
-// Virtual Machine auto pinning policy (disabled, existing, adjust).
+// Virtual Machine auto pinning policy (none, resize_and_pin).
 // Returns: nil or error
 func validateAutPinningPolicyValue(autopinningpolicy string) error {
 	switch autopinningpolicy {
-	case "disabled", "existing", "adjust":
+	case "none", "resize_and_pin":
 		return nil
 	default:
 		return fmt.Errorf(
 			"error creating oVirt instance: The machine auto pinning policy must "+
 				"be one of the following options: "+
-				"disabled, existing or adjust. The value: %s is not valid", autopinningpolicy)
+				"none or resize_and_pin. " +
+				"The value: %s is not valid", autopinningpolicy)
 	}
 }
 

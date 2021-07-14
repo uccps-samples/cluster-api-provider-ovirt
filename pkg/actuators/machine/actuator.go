@@ -30,7 +30,7 @@ const (
 	retryIntervalInstanceStatus = 10 * time.Second
 )
 
-// ActuatorParams holds parameter information for Actuator
+// ActuatorParams is the data structure that contains the parameters required to set up a new Actuator.
 type ActuatorParams struct {
 	Namespace      string
 	Client         client.Client

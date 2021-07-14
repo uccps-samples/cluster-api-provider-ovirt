@@ -202,6 +202,7 @@ func (ms *machineScope) reconcileMachineNetwork(ctx context.Context, status ovir
 	// expect IP addresses only on those statuses.
 	// in those statuses we 'll try reconciling
 	case ovirtsdk.VMSTATUS_UP, ovirtsdk.VMSTATUS_MIGRATING:
+	// Do nothing, we can proceed to reconcile Network
 	// update machine status.
 	// TODO: Should we clean the addresses here?
 	case ovirtsdk.VMSTATUS_DOWN:

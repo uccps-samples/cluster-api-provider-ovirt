@@ -21,6 +21,10 @@ import (
 
 var _ Client = (*ovirtClient)(nil)
 
+const (
+	BytesInMB = 1048576
+)
+
 // CreateVMByMachine creates an oVirt VM according to the ovirt provider spec.
 func (is *ovirtClient) CreateVMByMachine(
 	machineName string,
@@ -67,7 +71,17 @@ func (is *ovirtClient) CreateVMByMachine(
 						Threads(int64(providerSpec.CPU.Threads))))
 		}
 		if providerSpec.MemoryMB > 0 {
-			vmBuilder.Memory(int64(math.Pow(2, 20)) * int64(providerSpec.MemoryMB))
+			vmBuilder.Memory(int64(BytesInMB) * int64(providerSpec.MemoryMB))
+		}
+		if providerSpec.GuaranteedMemoryMB > 0 {
+			memoryPolicyBuilder := ovirtsdk.NewMemoryPolicyBuilder()
+			memoryPolicyBuilder.Guaranteed(int64(BytesInMB) * int64(providerSpec.GuaranteedMemoryMB))
+			memoryPolicy, err := memoryPolicyBuilder.Build()
+			if err != nil {
+				return nil, errors.Wrap(
+					err, "error applying Guaranteed Memory for VM ")
+			}
+			vmBuilder.MemoryPolicy(memoryPolicy)
 		}
 	}
 

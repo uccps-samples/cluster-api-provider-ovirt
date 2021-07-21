@@ -54,6 +54,11 @@ func validateMachine(ovirtClient ovirtC.Client, config *ovirtconfigv1.OvirtMachi
 	if err := validateHugepages(config.Hugepages); err != nil {
 		return errors.Wrap(err, "error validating Hugepages")
 	}
+
+	if err := validateGuaranteedMemory(config); err != nil {
+		return errors.Wrap(err, "error validating GuaranteedMemory")
+	}
+
 	return nil
 }
 
@@ -175,4 +180,20 @@ func versionCompare(v *ovirtsdk.Version, other *ovirtsdk.Version) (int64, error)
 		}
 	}
 	return result, nil
+}
+
+// validateGuaranteedMemory execute validation regarding the Virtual Machine validateGuaranteedMemory
+// Returns: nil or error
+func validateGuaranteedMemory(config *ovirtconfigv1.OvirtMachineProviderSpec) error {
+	if config.MemoryMB == 0 {
+		return fmt.Errorf("MemoryMB must be specified")
+	}
+	if config.GuaranteedMemoryMB > config.MemoryMB {
+		return fmt.Errorf("GuaranteedMemoryMB (%d) cannot be bigger then  MemoryMB (%d)",
+			config.GuaranteedMemoryMB,
+			config.MemoryMB)
+	}
+
+	return nil
+
 }

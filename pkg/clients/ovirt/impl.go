@@ -359,7 +359,7 @@ func (is *ovirtClient) FindVirtualMachineIP(id string, excludeAddr map[string]in
 		return "", fmt.Errorf("cannot find NICs for vmId: %s", id)
 	}
 
-	var nicRegex = regexp.MustCompile(`^(eth|en).*`)
+	var nicRegex = regexp.MustCompile(`^(eth|en|br\-ex).*`)
 
 	for _, reportedDevice := range reportedDeviceSlice.Slice() {
 		nicName, _ := reportedDevice.Name()

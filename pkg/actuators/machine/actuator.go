@@ -66,7 +66,7 @@ func (actuator *OvirtActuator) Create(ctx context.Context, machine *machinev1.Ma
 	providerSpec, err := ovirtconfigv1.ProviderSpecFromRawExtension(machine.Spec.ProviderSpec.Value)
 	if err != nil {
 		return actuator.handleMachineError(machine, "Create", apierrors.InvalidMachineConfiguration(
-			"Cannot unmarshal machineProviderSpec field: %v", err))
+			"cannot unmarshal machineProviderSpec field: %v", err))
 	}
 
 	connection, err := actuator.getConnection()
@@ -79,21 +79,21 @@ func (actuator *OvirtActuator) Create(ctx context.Context, machine *machinev1.Ma
 
 	if err := validateMachine(ovirtClient, providerSpec); err != nil {
 		return actuator.handleMachineError(machine, "Create", apierrors.InvalidMachineConfiguration(
-			"failed to create connection to oVirt API: %v", err))
+			"error validating machine fields: %v", err))
 	}
 
 	mScope := newMachineScope(ctx, ovirtClient, actuator.client, machine, providerSpec)
 	if err := mScope.create(); err != nil {
 		return actuator.handleMachineError(machine, "Create", apierrors.CreateMachine(
-			"Error creating Machine %v", err))
+			"error creating Machine %v", err))
 	}
 	if err := mScope.reconcileMachine(ctx); err != nil {
 		return actuator.handleMachineError(machine, "Create", apierrors.CreateMachine(
-			"Error reconciling Machine %v", err))
+			"error reconciling Machine %v", err))
 	}
 	if err := mScope.patchMachine(ctx); err != nil {
 		return actuator.handleMachineError(machine, "Create", apierrors.CreateMachine(
-			"Error patching Machine %v", err))
+			"error patching Machine %v", err))
 	}
 	actuator.eventRecorder.Eventf(machine, corev1.EventTypeNormal, "Created", "Updated Machine %v", machine.Name)
 	return nil
@@ -106,7 +106,7 @@ func (actuator *OvirtActuator) Update(ctx context.Context, machine *machinev1.Ma
 	providerSpec, err := ovirtconfigv1.ProviderSpecFromRawExtension(machine.Spec.ProviderSpec.Value)
 	if err != nil {
 		return actuator.handleMachineError(machine, "Update", apierrors.InvalidMachineConfiguration(
-			"Cannot unmarshal machineProviderSpec field: %v", err))
+			"cannot unmarshal machineProviderSpec field: %v", err))
 	}
 
 	connection, err := actuator.getConnection()
@@ -120,12 +120,12 @@ func (actuator *OvirtActuator) Update(ctx context.Context, machine *machinev1.Ma
 
 	if err := mScope.reconcileMachine(ctx); err != nil {
 		return actuator.handleMachineError(machine, "Update", apierrors.UpdateMachine(
-			"Error reconciling Machine %v", err))
+			"error reconciling Machine %v", err))
 	}
 
 	if err := mScope.patchMachine(ctx); err != nil {
 		return actuator.handleMachineError(machine, "Update", apierrors.UpdateMachine(
-			"Error patching Machine %v", err))
+			"error patching Machine %v", err))
 	}
 
 	actuator.eventRecorder.Eventf(machine, corev1.EventTypeNormal, "Update", "Updated Machine %v", machine.Name)
@@ -177,7 +177,7 @@ func (actuator *OvirtActuator) handleMachineError(machine *machinev1.Machine, re
 		}
 	}
 
-	klog.Errorf("Machine error %s: %v", machine.Name, err.Message)
+	klog.Errorf("machine %s error: %v", machine.Name, err.Message)
 	return err
 }
 

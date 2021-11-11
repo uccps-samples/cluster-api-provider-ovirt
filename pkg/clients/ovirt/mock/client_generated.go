@@ -8,9 +8,9 @@ import (
 	reflect "reflect"
 
 	gomock "github.com/golang/mock/gomock"
+	v1beta10 "github.com/openshift/api/machine/v1beta1"
 	v1beta1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
 	ovirt "github.com/openshift/cluster-api-provider-ovirt/pkg/clients/ovirt"
-	v1beta10 "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 	go_ovirt "github.com/ovirt/go-ovirt"
 )
 

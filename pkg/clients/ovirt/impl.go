@@ -11,8 +11,8 @@ import (
 	"regexp"
 	"time"
 
+	machinev1 "github.com/openshift/api/machine/v1beta1"
 	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
-	machinev1 "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 	"github.com/openshift/machine-api-operator/pkg/util"
 	ovirtsdk "github.com/ovirt/go-ovirt"
 	"github.com/pkg/errors"

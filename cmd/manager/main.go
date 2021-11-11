@@ -23,11 +23,11 @@ import (
 	"time"
 
 	configv1 "github.com/openshift/api/config/v1"
+	machinev1 "github.com/openshift/api/machine/v1beta1"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/actuators/machine"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/apis"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/controllers/nodeController"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/controllers/providerIDcontroller"
-	machinev1 "github.com/openshift/machine-api-operator/pkg/apis/machine/v1beta1"
 	capimachine "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"

@@ -248,13 +248,29 @@ func (is *ovirtClient) DeleteVM(id string) error {
 		if !ok {
 			return false, err
 		}
-
 		return vm.MustStatus() == ovirtsdk.VMSTATUS_DOWN, nil
 	})
 	if err != nil {
 		return fmt.Errorf("error waiting for VM %s to be down: %w", id, err)
 	}
-
+	// Detach all the disks that are not the bootable disk, to prevent them from being deleted
+	diskAttachmentsResp, err := vmService.DiskAttachmentsService().List().Send()
+	diskAttachments, ok := diskAttachmentsResp.Attachments()
+	if !ok {
+		return fmt.Errorf("error getting attachments from vm %s, error is: %w", id, err)
+	}
+	for _, da := range diskAttachments.Slice() {
+		bootable, ok := da.Bootable()
+		if !ok {
+			return fmt.Errorf("error while checking if disk attachment for vm %s is bootable: %w", id, err)
+		}
+		if !bootable {
+			_, err = vmService.DiskAttachmentsService().AttachmentService(da.MustId()).Remove().Send()
+			if err != nil {
+				return fmt.Errorf("error while detaching disk attachment %s for vm %s : %w", da.MustId(), id, err)
+			}
+		}
+	}
 	_, err = vmService.Remove().Send()
 	if err != nil {
 		return fmt.Errorf("error removing VM %s: %w", id, err)

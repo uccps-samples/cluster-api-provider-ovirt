@@ -88,6 +88,10 @@ type OvirtMachineProviderSpec struct {
 
 	// GuaranteedMemoryMB is the size of a VM's guaranteed memory in MiBs.
 	GuaranteedMemoryMB int32 `json:"guaranteed_memory_mb,omitempty"`
+
+	// PreallocatedDisks indicates that the disks on this machine should be preallocated instead of using thin
+	// provisioning.
+	PreallocatedDisks bool `json:"preallocated_disks,omitempty"`
 }
 
 // CPU defines the VM cpu, made of (Sockets * Cores * Threads)

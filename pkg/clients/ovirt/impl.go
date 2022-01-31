@@ -116,6 +116,19 @@ func (is *ovirtClient) CreateVMByMachine(
 		}
 		vmBuilder.CustomPropertiesOfAny(customProp)
 	}
+	if providerSpec.PreallocatedDisks {
+		templateDiskAttachments, err := is.connection.SystemService().TemplatesService().TemplateService(providerSpec.TemplateName).DiskAttachmentsService().List().Send()
+		if err != nil {
+			return nil, errors.Wrap(err, fmt.Sprintf("failed to fetch template %s disk attachments from oVirt Engine", providerSpec.TemplateName))
+		}
+		diskAttachments := []ovirtsdk.DiskAttachmentBuilder{}
+		for _, tplAttachedDisk := range templateDiskAttachments.MustAttachments().Slice() {
+			diskAttachments = append(diskAttachments, *ovirtsdk.NewDiskAttachmentBuilder().DiskBuilder(
+				ovirtsdk.NewDiskBuilder().Id(tplAttachedDisk.MustId()).Sparse(false).Format(ovirtsdk.DISKFORMAT_RAW),
+			))
+		}
+		vmBuilder.DiskAttachmentsBuilderOfAny(diskAttachments...)
+	}
 
 	vm, err := vmBuilder.Build()
 	if err != nil {

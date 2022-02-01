@@ -2,5 +2,6 @@ approvers:
   - janosdebugs
   - eslutsky
   - mmartinv
+  - bkhizgiy
 component: "Cloud Compute"
 subcomponent: "oVirt Provider"

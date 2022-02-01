@@ -1,7 +1,6 @@
 approvers:
   - janosdebugs
-  - bennyz
-  - Gal-Zaidman
   - eslutsky
+  - mmartinv
 component: "Cloud Compute"
 subcomponent: "oVirt Provider"

@@ -89,9 +89,20 @@ type OvirtMachineProviderSpec struct {
 	// GuaranteedMemoryMB is the size of a VM's guaranteed memory in MiBs.
 	GuaranteedMemoryMB int32 `json:"guaranteed_memory_mb,omitempty"`
 
-	// PreallocatedDisks indicates that the disks on this machine should be preallocated instead of using thin
-	// provisioning.
-	PreallocatedDisks bool `json:"preallocated_disks,omitempty"`
+	// Clone makes sure that the disks are cloned from the template and are not linked.
+	// Defaults to false.
+	// +optional
+	Clone *bool `json:"clone,omitempty"`
+
+	// Sparse indicates that sparse provisioning should not be used and disks should be preallocated.
+	// Defaults to false.
+	// +optional
+	Sparse *bool `json:"sparse,omitempty"`
+
+	// Format is the disk format that the disks are in. Can be "cow" or "raw". "raw" disables several features that
+	// may be needed, such as incremental backups. Defaults to "cow".
+	// +optional
+	Format string `json:"format,omitempty"`
 }
 
 // CPU defines the VM cpu, made of (Sockets * Cores * Threads)

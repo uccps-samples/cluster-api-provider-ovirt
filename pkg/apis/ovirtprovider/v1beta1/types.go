@@ -95,7 +95,7 @@ type OvirtMachineProviderSpec struct {
 	Clone *bool `json:"clone,omitempty"`
 
 	// Sparse indicates that sparse provisioning should not be used and disks should be preallocated.
-	// Defaults to false.
+	// Defaults to true.
 	// +optional
 	Sparse *bool `json:"sparse,omitempty"`
 

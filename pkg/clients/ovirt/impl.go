@@ -154,6 +154,12 @@ func (is *ovirtClient) CreateVMByMachine(
 	addRequest := is.connection.SystemService().VmsService().Add()
 	if providerSpec.Clone != nil {
 		addRequest.Clone(*providerSpec.Clone)
+	} else {
+		if providerSpec.VMType == string(ovirtsdk.VMTYPE_DESKTOP) {
+			addRequest.Clone(false)
+		} else {
+			addRequest.Clone(true)
+		}
 	}
 	response, err := addRequest.Vm(vm).Send()
 	if err != nil {

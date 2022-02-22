@@ -90,7 +90,11 @@ type OvirtMachineProviderSpec struct {
 	GuaranteedMemoryMB int32 `json:"guaranteed_memory_mb,omitempty"`
 
 	// Clone makes sure that the disks are cloned from the template and are not linked.
-	// Defaults to false.
+	// Defaults to true for high performance and server VM types, false for desktop types.
+	//
+	// Note: this option is not documented in the OpenShift documentation. This is intentional as it has sane defaults
+	// that shouldn't be changed unless needed for debugging or resolving issues in cooperation with Red Hat support.
+	//
 	// +optional
 	Clone *bool `json:"clone,omitempty"`
 
@@ -101,6 +105,7 @@ type OvirtMachineProviderSpec struct {
 
 	// Format is the disk format that the disks are in. Can be "cow" or "raw". "raw" disables several features that
 	// may be needed, such as incremental backups. Defaults to "cow".
+	// +kubebuilder:validation:Enum="";raw;cow
 	// +optional
 	Format string `json:"format,omitempty"`
 }

@@ -14,6 +14,8 @@ import (
 	machinev1 "github.com/openshift/api/machine/v1beta1"
 	"github.com/openshift/machine-api-operator/pkg/util"
 	ovirtsdk "github.com/ovirt/go-ovirt"
+	ovirtclient "github.com/ovirt/go-ovirt-client"
+	kloglogger "github.com/ovirt/go-ovirt-client-log-klog"
 	"github.com/pkg/errors"
 	"k8s.io/klog"
 
@@ -556,4 +558,33 @@ func CreateAPIConnection(creds *Creds) (*ovirtsdk.Connection, error) {
 		return nil, errors.Wrap(err, "error creating API connection")
 	}
 	return connection, nil
+}
+
+// NewClient returns a ovirt client  by using the given credentials
+func NewClient(creds *Creds) (ovirtclient.Client, error) {
+	tls := ovirtclient.TLS()
+
+	if creds.Insecure {
+		tls.Insecure()
+	}
+
+	if creds.CAFile != "" {
+		tls.CACertsFromFile(creds.CAFile)
+	}
+
+	logger := kloglogger.New()
+
+	client, err := ovirtclient.New(
+		creds.URL,
+		creds.Username,
+		creds.Password,
+		tls,
+		logger,
+		nil,
+	)
+
+	if err != nil {
+		return nil, err
+	}
+	return client, nil
 }

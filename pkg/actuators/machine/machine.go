@@ -7,10 +7,8 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	machinev1 "github.com/openshift/api/machine/v1beta1"
 	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
-	ovirtC "github.com/openshift/cluster-api-provider-ovirt/pkg/clients/ovirt"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
-	"github.com/openshift/machine-api-operator/pkg/util"
-	ovirtsdk "github.com/ovirt/go-ovirt"
+	ovirtC "github.com/ovirt/go-ovirt-client"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog"
@@ -54,12 +52,14 @@ func newMachineScope(
 
 // create creates an oVirt VM from the machine object if it does not exists.
 func (ms *machineScope) create() error {
+
+	//TODO: replace to GetVMByName once implemented in the client
+	vms, err := ms.ovirtClient.SearchVMs(ovirtC.VMSearchParams().WithName(ms.machine.Name))
 	// creating a new instance, we don't have the vm id yet
-	instance, err := ms.ovirtClient.GetVMByName(ms.machine.Name)
 	if err != nil {
 		return errors.Wrap(err, "error finding VM by name")
 	}
-	if instance != nil {
+	if vms != nil {
 		klog.Infof("Skipped creating a VM that already exists.\n")
 		return nil
 	}
@@ -69,65 +69,66 @@ func (ms *machineScope) create() error {
 		return errors.Wrap(err, "error getting VM ignition")
 	}
 
-	instance, err = ms.ovirtClient.CreateVMByMachine(
+	optionalVMParams := ovirtC.CreateVMParams().MustWithInitializationParameters(string(ignition), "test-vm")
+	clusterName := ms.machine.Labels["machine.openshift.io/cluster-api-cluster"]
+
+	temp, _ := ms.ovirtClient.GetBlankTemplate() //TODO: replace to GetTemplateByName once implemented in the client
+
+	instance, err := ms.ovirtClient.CreateVM(clusterName,
+		temp.ID(), //TODO: replace to GetTemplateByName once implemented in the client
 		ms.machine.Name,
-		ms.machine.Labels["machine.openshift.io/cluster-api-cluster"],
-		ignition,
-		ms.machineProviderSpec)
+		optionalVMParams)
+
 	if err != nil {
 		return errors.Wrap(err, "error creating Ovirt instance")
 	}
 
 	// Wait till ready
-	err = ms.waitTillVMReachStatus(ovirtsdk.VMSTATUS_DOWN)
+	_, err = ms.ovirtClient.WaitForVMStatus(instance.ID(), ovirtC.VMStatusDown)
 	if err != nil {
 		return errors.Wrap(err, "error creating oVirt VM")
 	}
 
 	// Start the VM
-	err = ms.ovirtClient.StartVM(instance.MustId())
+	err = ms.ovirtClient.StartVM(instance.ID())
 	if err != nil {
 		return errors.Wrap(err, "error running oVirt VM")
 	}
 
 	// Wait till running
-	err = ms.waitTillVMReachStatus(ovirtsdk.VMSTATUS_UP)
+	_, err = ms.ovirtClient.WaitForVMStatus(instance.ID(), ovirtC.VMStatusUp)
 	if err != nil {
 		return errors.Wrap(err, "Error waiting for oVirt VM to be UP")
 	}
 	return nil
 }
 
-func (ms *machineScope) waitTillVMReachStatus(status ovirtsdk.VmStatus) error {
-	return util.PollImmediate(retryIntervalInstanceStatus, timeoutInstanceCreate, func() (bool, error) {
-		instance, err := ms.ovirtClient.GetVMByMachine(*ms.machine)
-		if err != nil {
-			return false, err
-		}
-		return instance.MustStatus() == status, nil
-	})
-}
-
 // exists returns true if machine exists.
 func (ms *machineScope) exists() (bool, error) {
-	instance, err := ms.ovirtClient.GetVMByMachine(*ms.machine)
+	//TODO: replace to GetVMByName once implemented in the client
+	vms, err := ms.ovirtClient.SearchVMs(ovirtC.VMSearchParams().WithName(ms.machine.Name))
+
 	if err != nil {
 		return false, errors.Wrap(err, "error finding VM by name")
 	}
-	return instance != nil, nil
+	return vms != nil, nil
 }
 
 // delete deletes the VM which corresponds with the machine object from the oVirt engine
 func (ms *machineScope) delete() error {
-	instance, err := ms.ovirtClient.GetVMByMachine(*ms.machine)
+	//TODO: replace to GetVMByName once implemented in the client
+	vms, err := ms.ovirtClient.SearchVMs(ovirtC.VMSearchParams().WithName(ms.machine.Name))
+
 	if err != nil {
 		return errors.Wrap(err, "error finding VM by name")
 	}
-	if instance == nil {
+
+	if vms == nil {
 		klog.Infof("Skipped deleting a VM that is already deleted.\n")
 		return nil
 	}
-	return ms.ovirtClient.DeleteVM(instance.MustId())
+
+	return ms.ovirtClient.RemoveVM(vms[0].ID())
 }
 
 // returns the ignition from the userData secret
@@ -154,20 +155,25 @@ func (ms *machineScope) getIgnition() ([]byte, error) {
 }
 
 func (ms *machineScope) reconcileMachine(ctx context.Context) error {
-	instance, err := ms.ovirtClient.GetVMByMachine(*ms.machine)
+	//TODO: replace to GetVMByName once implemented in the client
+	vms, err := ms.ovirtClient.SearchVMs(ovirtC.VMSearchParams().WithName(ms.machine.Name))
+
 	if err != nil {
 		return errors.Wrap(err, "error finding VM by name")
 	}
-	id := instance.MustId()
-	status := string(instance.MustStatus())
-	name := instance.MustName()
+
+	instance := vms[0]
+
+	id := instance.ID()
+	status := instance.Status()
+	name := instance.Name()
 	ms.reconcileMachineProviderID(id)
-	ms.reconcileMachineAnnotations(status, id)
-	err = ms.reconcileMachineNetwork(ctx, instance.MustStatus(), name, id)
+	ms.reconcileMachineAnnotations(string(status), id)
+	err = ms.reconcileMachineNetwork(ctx, status, name, id)
 	if err != nil {
 		return errors.Wrap(err, "error reconciling machine network")
 	}
-	err = ms.reconcileMachineProviderStatus(&status, &id)
+	err = ms.reconcileMachineProviderStatus(string(status), &id)
 	if err != nil {
 		return errors.Wrap(err, "error reconciling machine provider status")
 	}
@@ -196,16 +202,16 @@ func (ms *machineScope) patchMachine(ctx context.Context) error {
 	return nil
 }
 
-func (ms *machineScope) reconcileMachineNetwork(ctx context.Context, status ovirtsdk.VmStatus,
+func (ms *machineScope) reconcileMachineNetwork(ctx context.Context, status ovirtC.VMStatus,
 	name string, vmID string) error {
 	switch status {
 	// expect IP addresses only on those statuses.
 	// in those statuses we 'll try reconciling
-	case ovirtsdk.VMSTATUS_UP, ovirtsdk.VMSTATUS_MIGRATING:
+	case ovirtC.VMStatusUp, ovirtC.VMStatusMigrating:
 	// Do nothing, we can proceed to reconcile Network
 	// update machine status.
 	// TODO: Should we clean the addresses here?
-	case ovirtsdk.VMSTATUS_DOWN:
+	case ovirtC.VMStatusDown:
 		return nil
 
 	// return error if vm is transient state this will force retry reconciling until VM is up.
@@ -218,12 +224,14 @@ func (ms *machineScope) reconcileMachineNetwork(ctx context.Context, status ovir
 	klog.V(5).Infof("using oVirt SDK to find %s IP addresses", name)
 
 	// get API and ingress addresses that will be excluded from the node address selection
-	excludeAddr, err := ms.getClusterAddress(ctx)
-	if err != nil {
-		return errors.Wrap(err, "error getting cluster address")
-	}
+	//excludeAddr, err := ms.getClusterAddress(ctx)
+	//if err != nil {
+	//	return errors.Wrap(err, "error getting cluster address")
+	//}
 
-	ip, err := ms.ovirtClient.FindVirtualMachineIP(vmID, excludeAddr)
+	// TODO: implement FindVirtualMachineIP in the client
+	ip := "192.168.210.11"
+	var err error = nil
 
 	if err != nil {
 		// stop reconciliation till we get IP addresses - otherwise the state will be considered stable.
@@ -251,12 +259,12 @@ func (ms *machineScope) getClusterAddress(ctx context.Context) (map[string]int, 
 	return clusterAddr, nil
 }
 
-func (ms *machineScope) reconcileMachineProviderStatus(status *string, id *string) error {
+func (ms *machineScope) reconcileMachineProviderStatus(status string, id *string) error {
 	providerStatus, err := ovirtconfigv1.ProviderStatusFromRawExtension(ms.machine.Status.ProviderStatus)
 	if err != nil {
 		return errors.Wrap(err, "error unmarshaling machine ProviderStatus field")
 	}
-	providerStatus.InstanceState = status
+	providerStatus.InstanceState = &status
 	providerStatus.InstanceID = id
 	rawExtension, err := ovirtconfigv1.RawExtensionFromProviderStatus(providerStatus)
 	if err != nil {

@@ -4,8 +4,8 @@ import (
 	"fmt"
 
 	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
-	ovirtC "github.com/openshift/cluster-api-provider-ovirt/pkg/clients/ovirt"
 	ovirtsdk "github.com/ovirt/go-ovirt"
+	ovirtC "github.com/ovirt/go-ovirt-client"
 	"github.com/pkg/errors"
 )
 
@@ -117,31 +117,8 @@ func validateHugepages(value int32) error {
 
 // autoPinningSupported will check if the engine's version is relevant for the feature.
 func autoPinningSupported(ovirtClient ovirtC.Client, config *ovirtconfigv1.OvirtMachineProviderSpec) error {
-	err := validateAutoPinningPolicyValue(config.AutoPinningPolicy)
-	if err != nil {
-		return errors.Wrap(err, "error validating auto pinning policy")
-	}
-	// TODO: remove the version check when everyone uses engine 4.4.5
-	engineVer, err := ovirtClient.GetEngineVersion()
-	if err != nil {
-		return errors.Wrap(err, "error finding engine version")
-	}
-	autoPiningRequiredEngineVersion := ovirtsdk.NewVersionBuilder().
-		Major(4).
-		Minor(4).
-		Build_(5).
-		Revision(0).
-		MustBuild()
-	versionCompareResult, err := versionCompare(engineVer, autoPiningRequiredEngineVersion)
-	if err != nil {
-		return errors.Wrap(err, "error comparing engine versions")
-	}
-	// The version is OK.
-	if versionCompareResult >= 0 {
-		return nil
-	}
-	return fmt.Errorf("the engine version %d.%d.%d is not supporting the auto pinning feature. "+
-		"Please update to 4.4.5 or later", engineVer.MustMajor(), engineVer.MustMinor(), engineVer.MustBuild())
+	//TODO: autoPinningSupported need to be implement in client
+	return nil
 }
 
 // validateAutPinningPolicyValue execute validations regarding the

@@ -12,11 +12,12 @@ import (
 	"time"
 
 	machinev1 "github.com/openshift/api/machine/v1beta1"
-	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
 	"github.com/openshift/machine-api-operator/pkg/util"
 	ovirtsdk "github.com/ovirt/go-ovirt"
 	"github.com/pkg/errors"
 	"k8s.io/klog"
+
+	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
 )
 
 var _ Client = (*ovirtClient)(nil)
@@ -116,6 +117,33 @@ func (is *ovirtClient) CreateVMByMachine(
 		}
 		vmBuilder.CustomPropertiesOfAny(customProp)
 	}
+	if providerSpec.Sparse != nil || providerSpec.Format != "" {
+		templateDiskAttachments, err := is.connection.SystemService().TemplatesService().TemplateService(providerSpec.TemplateName).DiskAttachmentsService().List().Send()
+		if err != nil {
+			return nil, errors.Wrap(
+				err,
+				fmt.Sprintf(
+					"failed to fetch template %s disk attachments from oVirt Engine",
+					providerSpec.TemplateName,
+				),
+			)
+		}
+		diskAttachments := []ovirtsdk.DiskAttachmentBuilder{}
+		for _, tplAttachedDisk := range templateDiskAttachments.MustAttachments().Slice() {
+			diskBuilder := ovirtsdk.NewDiskBuilder().Id(tplAttachedDisk.MustId())
+			if providerSpec.Sparse != nil {
+				diskBuilder.Sparse(*providerSpec.Sparse)
+			}
+			if providerSpec.Format != "" {
+				diskBuilder.Format(ovirtsdk.DiskFormat(providerSpec.Format))
+			}
+
+			diskAttachments = append(
+				diskAttachments, *ovirtsdk.NewDiskAttachmentBuilder().DiskBuilder(diskBuilder),
+			)
+		}
+		vmBuilder.DiskAttachmentsBuilderOfAny(diskAttachments...)
+	}
 
 	vm, err := vmBuilder.Build()
 	if err != nil {
@@ -123,7 +151,17 @@ func (is *ovirtClient) CreateVMByMachine(
 	}
 
 	klog.Infof("creating VM: %v", vm.MustName())
-	response, err := is.connection.SystemService().VmsService().Add().Vm(vm).Send()
+	addRequest := is.connection.SystemService().VmsService().Add()
+	if providerSpec.Clone != nil {
+		addRequest.Clone(*providerSpec.Clone)
+	} else {
+		if providerSpec.VMType == string(ovirtsdk.VMTYPE_DESKTOP) {
+			addRequest.Clone(false)
+		} else {
+			addRequest.Clone(true)
+		}
+	}
+	response, err := addRequest.Vm(vm).Send()
 	if err != nil {
 		klog.Errorf("Failed creating VM %v", err)
 		return nil, errors.Wrap(err, "error creating VM")

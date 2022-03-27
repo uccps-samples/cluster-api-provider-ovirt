@@ -53,9 +53,8 @@ func newMachineScope(
 // create creates an oVirt VM from the machine object if it does not exists.
 func (ms *machineScope) create() error {
 
-	//TODO: replace to GetVMByName once implemented in the client
-	vms, err := ms.ovirtClient.SearchVMs(ovirtC.VMSearchParams().WithName(ms.machine.Name))
-	// creating a new instance, we don't have the vm id yet
+	vms, err := ms.ovirtClient.GetVMByName(ms.machine.Name)
+
 	if err != nil {
 		return errors.Wrap(err, "error finding VM by name")
 	}
@@ -70,12 +69,18 @@ func (ms *machineScope) create() error {
 	}
 
 	optionalVMParams := ovirtC.CreateVMParams().MustWithInitializationParameters(string(ignition), "test-vm")
-	clusterName := ms.machine.Labels["machine.openshift.io/cluster-api-cluster"]
+	//clusterName := ms.machine.Labels["machine.openshift.io/cluster-api-cluster"]
+	clusterId := ms.machineProviderSpec.ClusterId
+	templateName := ms.machineProviderSpec.TemplateName
 
-	temp, _ := ms.ovirtClient.GetBlankTemplate() //TODO: replace to GetTemplateByName once implemented in the client
+	temp, err := ms.ovirtClient.GetTemplateByName(templateName)
 
-	instance, err := ms.ovirtClient.CreateVM(clusterName,
-		temp.ID(), //TODO: replace to GetTemplateByName once implemented in the client
+	if err != nil {
+		return errors.Wrapf(err, "error finding template name %s.", templateName)
+	}
+
+	instance, err := ms.ovirtClient.CreateVM(ovirtC.ClusterID(clusterId),
+		temp.ID(),
 		ms.machine.Name,
 		optionalVMParams)
 
@@ -105,30 +110,26 @@ func (ms *machineScope) create() error {
 
 // exists returns true if machine exists.
 func (ms *machineScope) exists() (bool, error) {
-	//TODO: replace to GetVMByName once implemented in the client
-	vms, err := ms.ovirtClient.SearchVMs(ovirtC.VMSearchParams().WithName(ms.machine.Name))
-
+	vm, err := ms.ovirtClient.GetVMByName(ms.machine.Name)
 	if err != nil {
 		return false, errors.Wrap(err, "error finding VM by name")
 	}
-	return vms != nil, nil
+	return vm != nil, nil
 }
 
 // delete deletes the VM which corresponds with the machine object from the oVirt engine
 func (ms *machineScope) delete() error {
-	//TODO: replace to GetVMByName once implemented in the client
-	vms, err := ms.ovirtClient.SearchVMs(ovirtC.VMSearchParams().WithName(ms.machine.Name))
-
+	vm, err := ms.ovirtClient.GetVMByName(ms.machine.Name)
 	if err != nil {
 		return errors.Wrap(err, "error finding VM by name")
 	}
 
-	if vms == nil {
+	if vm == nil {
 		klog.Infof("Skipped deleting a VM that is already deleted.\n")
 		return nil
 	}
 
-	return ms.ovirtClient.RemoveVM(vms[0].ID())
+	return ms.ovirtClient.RemoveVM(vm.ID())
 }
 
 // returns the ignition from the userData secret
@@ -155,14 +156,11 @@ func (ms *machineScope) getIgnition() ([]byte, error) {
 }
 
 func (ms *machineScope) reconcileMachine(ctx context.Context) error {
-	//TODO: replace to GetVMByName once implemented in the client
-	vms, err := ms.ovirtClient.SearchVMs(ovirtC.VMSearchParams().WithName(ms.machine.Name))
+	instance, err := ms.ovirtClient.GetVMByName(ms.machine.Name)
 
 	if err != nil {
 		return errors.Wrap(err, "error finding VM by name")
 	}
-
-	instance := vms[0]
 
 	id := instance.ID()
 	status := instance.Status()

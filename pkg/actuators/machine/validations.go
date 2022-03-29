@@ -4,18 +4,15 @@ import (
 	"fmt"
 
 	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
-	ovirtsdk "github.com/ovirt/go-ovirt"
 	ovirtC "github.com/ovirt/go-ovirt-client"
 	"github.com/pkg/errors"
 )
 
 const (
-	ErrorInvalidMachineObject    = "error validating machine object fields"
-	noHugePages                  = 0
-	hugePages2M                  = 2048
-	hugePages1GB                 = 1048576
-	autoPiningPolicyNone         = "none"
-	autoPiningPolicyResizeAndPin = "resize_and_pin"
+	ErrorInvalidMachineObject = "error validating machine object fields"
+	noHugePages               = 0
+	hugePages2M               = 2048
+	hugePages1GB              = 1048576
 )
 
 // validateMachine validates the machine object yaml fields and
@@ -46,9 +43,12 @@ func validateMachine(ovirtClient ovirtC.Client, config *ovirtconfigv1.OvirtMachi
 	}
 
 	if config.AutoPinningPolicy != "" {
-		err := autoPinningSupported(ovirtClient, config)
+		supported, err := ovirtClient.SupportsFeature(ovirtC.FeatureAutoPinning)
 		if err != nil {
-			return errors.Wrap(err, "error validating AutoPinningPolicy")
+			return errors.Wrap(err, "Failed to check autopinning support")
+		}
+		if !supported {
+			return errors.Wrap(err, "Autopinning is not supported.")
 		}
 	}
 	if err := validateHugepages(config.Hugepages); err != nil {
@@ -113,50 +113,6 @@ func validateHugepages(value int32) error {
 				"be one of the following options: 2048, 1048576. "+
 				"The value: %d is not valid", value)
 	}
-}
-
-// autoPinningSupported will check if the engine's version is relevant for the feature.
-func autoPinningSupported(ovirtClient ovirtC.Client, config *ovirtconfigv1.OvirtMachineProviderSpec) error {
-	//TODO: autoPinningSupported need to be implement in client
-	return nil
-}
-
-// validateAutPinningPolicyValue execute validations regarding the
-// Virtual Machine auto pinning policy (none, resize_and_pin).
-// Returns: nil or error
-func validateAutoPinningPolicyValue(autopinningpolicy string) error {
-	switch autopinningpolicy {
-	case autoPiningPolicyNone, autoPiningPolicyResizeAndPin:
-		return nil
-	default:
-		return fmt.Errorf(
-			"error creating oVirt instance: The machine auto pinning policy must "+
-				"be one of the following options: "+
-				"none or resize_and_pin. "+
-				"The value: %s is not valid", autopinningpolicy)
-	}
-}
-
-// versionCompare will take two *ovirtsdk.Version and compare the then
-// 1 - is returned if v > other
-func versionCompare(v *ovirtsdk.Version, other *ovirtsdk.Version) (int64, error) {
-	if v == nil || other == nil {
-		return 5, fmt.Errorf("can't compare nil objects")
-	}
-	if v == other {
-		return 0, nil
-	}
-	result := v.MustMajor() - other.MustMajor()
-	if result == 0 {
-		result = v.MustMinor() - other.MustMinor()
-		if result == 0 {
-			result = v.MustBuild() - other.MustBuild()
-			if result == 0 {
-				result = v.MustRevision() - other.MustRevision()
-			}
-		}
-	}
-	return result, nil
 }
 
 // validateGuaranteedMemory execute validation regarding the Virtual Machine validateGuaranteedMemory

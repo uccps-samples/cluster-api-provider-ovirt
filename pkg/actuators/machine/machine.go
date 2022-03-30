@@ -3,6 +3,7 @@ package machine
 import (
 	"context"
 	"fmt"
+	"math"
 
 	configv1 "github.com/openshift/api/config/v1"
 	machinev1 "github.com/openshift/api/machine/v1beta1"
@@ -63,13 +64,39 @@ func (ms *machineScope) create() error {
 		return nil
 	}
 
+	// Add ignition to the VM params
 	ignition, err := ms.getIgnition()
 	if err != nil {
 		return errors.Wrap(err, "error getting VM ignition")
 	}
+	optionalVMParams := ovirtC.CreateVMParams().MustWithInitializationParameters(string(ignition), ms.machine.Name)
 
-	optionalVMParams := ovirtC.CreateVMParams().MustWithInitializationParameters(string(ignition), "test-vm")
-	//clusterName := ms.machine.Labels["machine.openshift.io/cluster-api-cluster"]
+	// Add CPU
+	if ms.machineProviderSpec.CPU != nil {
+		optionalVMParams = optionalVMParams.MustWithCPUParameters(uint(ms.machineProviderSpec.CPU.Cores),
+			uint(ms.machineProviderSpec.CPU.Sockets),
+			uint(ms.machineProviderSpec.CPU.Threads))
+	}
+
+	if ms.machineProviderSpec.MemoryMB > 0 {
+		// TODO: add MustWithMemory() - https://github.com/oVirt/go-ovirt-client/issues/138
+	}
+
+	if ms.machineProviderSpec.GuaranteedMemoryMB > 0 {
+		// TODO: add GuaranteedMemoryMB() - https://github.com/oVirt/go-ovirt-client/issues/91
+	}
+
+	isAutoPinning := false
+	if ms.machineProviderSpec.AutoPinningPolicy != "" {
+		isAutoPinning = true
+		//TODO: add AutoPinning PlacementPolicy - https://github.com/oVirt/go-ovirt-client/issues/137
+	}
+
+	if ms.machineProviderSpec.Hugepages > 0 {
+		optionalVMParams = optionalVMParams.MustWithHugePages(ovirtC.VMHugePages(ms.machineProviderSpec.Hugepages))
+	}
+
+	// CREATE VM from a template
 	clusterId := ms.machineProviderSpec.ClusterId
 	templateName := ms.machineProviderSpec.TemplateName
 
@@ -93,6 +120,74 @@ func (ms *machineScope) create() error {
 	if err != nil {
 		return errors.Wrap(err, "error creating oVirt VM")
 	}
+
+	var bootableDiskAttachment ovirtC.DiskAttachment
+	newDiskSize := uint64(ms.machineProviderSpec.OSDisk.SizeGB * int64(math.Pow(2, 30)))
+	// Handle OS disk extension
+	if ms.machineProviderSpec.OSDisk != nil {
+		diskAttachments, err := instance.ListDiskAttachments()
+		if err != nil {
+			errors.Wrapf(err, "Failed to list disk attachments for VM %s.", instance.ID())
+		}
+		for _, disk := range diskAttachments {
+			if disk.Bootable() {
+				bootableDiskAttachment = disk
+			}
+		}
+
+		if bootableDiskAttachment == nil {
+			return errors.Wrapf(err, "VM %s(%s) doesn't have a bootable disk", instance.Name(), instance.ID())
+		}
+
+		disk, err := ms.ovirtClient.GetDisk(bootableDiskAttachment.DiskID())
+		if newDiskSize > disk.ProvisionedSize() {
+			updatedDisk, err := disk.Update(ovirtC.UpdateDiskParams().MustWithProvisionedSize(newDiskSize))
+			if err != nil {
+				return errors.Wrapf(err, "Failed to extend disk %s (%v)", disk.ID())
+			}
+			klog.Infof("Waiting for disk to become OK...")
+			updatedDisk, err = updatedDisk.WaitForOK()
+			if err != nil {
+				return errors.Wrapf(err, "Failed to wait for disk %s to return to OK status. (%v)", disk.ID())
+			}
+		}
+	}
+
+	// handleNics reattachment
+	if ms.machineProviderSpec.NetworkInterfaces != nil && len(ms.machineProviderSpec.NetworkInterfaces) > 0 {
+		nics, err := instance.ListNICs()
+		if err != nil {
+			errors.Wrapf(err, "failed to list NICs on VM %s", instance.ID())
+		}
+
+		//remove all the nics from the VM instance
+		for _, nic := range nics {
+			if err := nic.Remove(); err != nil {
+				errors.Wrapf(err, "failed to remove NIC %s", nic.ID())
+			}
+		}
+
+		//re-create NICs According to the machinespec
+		for i, nic := range ms.machineProviderSpec.NetworkInterfaces {
+			_, err := instance.CreateNIC(fmt.Sprintf("nic%d", i+1), nic.VNICProfileID, ovirtC.CreateNICParams())
+
+			if err != nil {
+				return errors.Wrap(err, "failed to create network interface")
+			}
+		}
+	}
+
+	if isAutoPinning {
+		if ms.machineProviderSpec.AutoPinningPolicy == "resize_and_pin" {
+			err = ms.ovirtClient.AutoOptimizeVMCPUPinningSettings(instance.ID(), true)
+			if err != nil {
+				errors.Wrapf(err, "failed to Optimize CPU pinning settings for VM %s", instance.ID())
+			}
+		}
+	}
+
+	// TODO: attach Tag to a VM using tagName instead of ID - https://github.com/oVirt/go-ovirt-client/issues/135
+	// TODO: handleAffinityGroups -
 
 	// Start the VM
 	err = ms.ovirtClient.StartVM(instance.ID())
@@ -227,7 +322,7 @@ func (ms *machineScope) reconcileMachineNetwork(ctx context.Context, status ovir
 	//	return errors.Wrap(err, "error getting cluster address")
 	//}
 
-	// TODO: implement FindVirtualMachineIP in the client
+	// TODO: implement FindVirtualMachineIP in the client - https://github.com/oVirt/go-ovirt-client/issues/95
 	ip := "192.168.210.11"
 	var err error = nil
 

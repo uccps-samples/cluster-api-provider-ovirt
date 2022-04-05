@@ -23,7 +23,7 @@ type VMClient interface {
 	// UpdateVM updates the virtual machine with the given parameters.
 	// Use UpdateVMParams to obtain a builder for the params.
 	UpdateVM(id string, params UpdateVMParameters, retries ...RetryStrategy) (VM, error)
-	// SetVMOptimizePinningSettings sets the CPU settings to optimized.
+	// AutoOptimizeVMCPUPinningSettings sets the CPU settings to optimized.
 	AutoOptimizeVMCPUPinningSettings(id string, optimize bool, retries ...RetryStrategy) error
 	// StartVM triggers a VM start. The actual VM startup will take time and should be waited for via the
 	// WaitForVMStatus call.
@@ -46,6 +46,8 @@ type VMClient interface {
 	RemoveVM(id string, retries ...RetryStrategy) error
 	// AddTagToVM Add tag specified by id to a VM.
 	AddTagToVM(id string, tagID string, retries ...RetryStrategy) error
+	// AddTagToVMByName Add tag specified by Name to a VM.
+	AddTagToVMByName(id string, tagName string, retries ...RetryStrategy) error
 }
 
 // VMData is the core of VM providing only data access functions.
@@ -64,7 +66,9 @@ type VMData interface {
 	Status() VMStatus
 	// CPU returns the CPU structure of a VM.
 	CPU() VMCPU
-	// TagIDS returns a list of tags for this VM.
+	// Memory return the Memory of a VM in Bytes.
+	Memory() int64
+	// TagIDs returns a list of tags for this VM.
 	TagIDs() []string
 	// HugePages returns the hugepage settings for the VM, if any.
 	HugePages() *VMHugePages
@@ -395,6 +399,16 @@ type OptionalVMParameters interface {
 
 	// Initialization defines the virtual machine’s initialization configuration.
 	Initialization() Initialization
+
+	// Clone should return true if the VM should be cloned from the template instead of linking it. This means that the
+	// template can be removed while the VM still exists.
+	Clone() *bool
+
+	// Memory returns the VM memory in Bytes.
+	Memory() *int64
+
+	// Disks returns a list of disks that are to be changed from the template.
+	Disks() []OptionalVMDiskParameters
 }
 
 // BuildableVMParameters is a variant of OptionalVMParameters that can be changed using the supplied
@@ -422,13 +436,122 @@ type BuildableVMParameters interface {
 	WithHugePages(hugePages VMHugePages) (BuildableVMParameters, error)
 	// MustWithHugePages is identical to WithHugePages, but panics instead of returning an error.
 	MustWithHugePages(hugePages VMHugePages) BuildableVMParameters
-
+	// WithMemory sets the Memory setting for the VM.
+	WithMemory(memory int64) (BuildableVMParameters, error)
+	// MustWithMemory is identical to WithMemory, but panics instead of returning an error.
+	MustWithMemory(memory int64) BuildableVMParameters
 	// WithInitialization sets the virtual machine’s initialization configuration.
 	WithInitialization(initialization Initialization) (BuildableVMParameters, error)
 	// MustWithInitialization is identical to WithInitialization, but panics instead of returning an error.
 	MustWithInitialization(initialization Initialization) BuildableVMParameters
 	// MustWithInitializationParameters is a simplified function that calls MustNewInitialization and adds customScript
 	MustWithInitializationParameters(customScript, hostname string) BuildableVMParameters
+
+	// WithClone sets the clone flag. If the clone flag is true the VM is cloned from the template instead of linking to
+	// it. This means the template can be deleted while the VM still exists.
+	WithClone(clone bool) (BuildableVMParameters, error)
+	// MustWithClone is identical to WithClone, but panics instead of returning an error.
+	MustWithClone(clone bool) BuildableVMParameters
+
+	// WithDisks adds disk configurations to the VM creation to manipulate the disks inherited from templates.
+	WithDisks(disks []OptionalVMDiskParameters) (BuildableVMParameters, error)
+	// MustWithDisks is identical to WithDisks, but panics instead of returning an error.
+	MustWithDisks(disks []OptionalVMDiskParameters) BuildableVMParameters
+}
+
+// OptionalVMDiskParameters describes the disk parameters that can be given to VM creation. These manipulate the
+// disks inherited from the template.
+type OptionalVMDiskParameters interface {
+	// DiskID returns the identifier of the disk that is being changed.
+	DiskID() string
+	// Sparse sets the sparse parameter if set. Note, that Sparse is only supported in oVirt on block devices with QCOW2
+	// images. On NFS you MUST use raw disks to use sparse.
+	Sparse() *bool
+	// Format returns the image format to be used for the specified disk.
+	Format() *ImageFormat
+}
+
+// BuildableVMDiskParameters is a buildable version of OptionalVMDiskParameters.
+type BuildableVMDiskParameters interface {
+	OptionalVMDiskParameters
+
+	// WithSparse enables or disables sparse disk provisioning. Note, that Sparse is only supported in oVirt on block
+	// devices with QCOW2 images. On NFS you MUST use raw images to use sparse. See WithFormat.
+	WithSparse(sparse bool) (BuildableVMDiskParameters, error)
+	// MustWithSparse is identical to WithSparse, but panics instead of returning an error.
+	MustWithSparse(sparse bool) BuildableVMDiskParameters
+
+	// WithFormat adds a disk format to the VM on creation. Note, that QCOW2 is only supported in conjunction with
+	// Sparse on block devices. On NFS you MUST use raw images to use sparse. See WithSparse.
+	WithFormat(format ImageFormat) (BuildableVMDiskParameters, error)
+	// MustWithFormat is identical to WithFormat, but panics instead of returning an error.
+	MustWithFormat(format ImageFormat) BuildableVMDiskParameters
+}
+
+// NewBuildableVMDiskParameters creates a new buildable OptionalVMDiskParameters.
+func NewBuildableVMDiskParameters(diskID string) (BuildableVMDiskParameters, error) {
+	return &vmDiskParameters{
+		diskID,
+		nil,
+		nil,
+	}, nil
+}
+
+// MustNewBuildableVMDiskParameters is identical to NewBuildableVMDiskParameters but panics instead of returning an
+// error.
+func MustNewBuildableVMDiskParameters(diskID string) BuildableVMDiskParameters {
+	builder, err := NewBuildableVMDiskParameters(diskID)
+	if err != nil {
+		panic(err)
+	}
+	return builder
+}
+
+type vmDiskParameters struct {
+	diskID string
+	sparse *bool
+	format *ImageFormat
+}
+
+func (v *vmDiskParameters) Format() *ImageFormat {
+	return v.format
+}
+
+func (v *vmDiskParameters) WithFormat(format ImageFormat) (BuildableVMDiskParameters, error) {
+	if err := format.Validate(); err != nil {
+		return nil, err
+	}
+	v.format = &format
+	return v, nil
+}
+
+func (v *vmDiskParameters) MustWithFormat(format ImageFormat) BuildableVMDiskParameters {
+	builder, err := v.WithFormat(format)
+	if err != nil {
+		panic(err)
+	}
+	return builder
+}
+
+func (v *vmDiskParameters) DiskID() string {
+	return v.diskID
+}
+
+func (v *vmDiskParameters) Sparse() *bool {
+	return v.sparse
+}
+
+func (v *vmDiskParameters) WithSparse(sparse bool) (BuildableVMDiskParameters, error) {
+	v.sparse = &sparse
+	return v, nil
+}
+
+func (v *vmDiskParameters) MustWithSparse(sparse bool) BuildableVMDiskParameters {
+	builder, err := v.WithSparse(sparse)
+	if err != nil {
+		panic(err)
+	}
+	return builder
 }
 
 // UpdateVMParameters returns a set of parameters to change on a VM.
@@ -586,6 +709,57 @@ type vmParams struct {
 	hugePages *VMHugePages
 
 	initialization Initialization
+	memory         *int64
+
+	clone *bool
+
+	disks []OptionalVMDiskParameters
+}
+
+func (v *vmParams) Clone() *bool {
+	return v.clone
+}
+
+func (v *vmParams) WithClone(clone bool) (BuildableVMParameters, error) {
+	v.clone = &clone
+	return v, nil
+}
+
+func (v *vmParams) MustWithClone(clone bool) BuildableVMParameters {
+	builder, err := v.WithClone(clone)
+	if err != nil {
+		panic(err)
+	}
+	return builder
+}
+
+func (v *vmParams) Disks() []OptionalVMDiskParameters {
+	return v.disks
+}
+
+func (v *vmParams) WithDisks(disks []OptionalVMDiskParameters) (BuildableVMParameters, error) {
+	diskIDs := map[string]int{}
+	for i, d := range disks {
+		if previousID, ok := diskIDs[d.DiskID()]; ok {
+			return nil, newError(
+				EBadArgument,
+				"Disk %s appears twice, in position %d and %d.",
+				d.DiskID(),
+				previousID,
+				i,
+			)
+		}
+	}
+	v.disks = disks
+	return v, nil
+}
+
+func (v *vmParams) MustWithDisks(disks []OptionalVMDiskParameters) BuildableVMParameters {
+	builder, err := v.WithDisks(disks)
+	if err != nil {
+		panic(err)
+	}
+	return builder
 }
 
 func (v *vmParams) HugePages() *VMHugePages {
@@ -602,6 +776,23 @@ func (v *vmParams) WithHugePages(hugePages VMHugePages) (BuildableVMParameters, 
 
 func (v *vmParams) MustWithHugePages(hugePages VMHugePages) BuildableVMParameters {
 	builder, err := v.WithHugePages(hugePages)
+	if err != nil {
+		panic(err)
+	}
+	return builder
+}
+
+func (v *vmParams) Memory() *int64 {
+	return v.memory
+}
+
+func (v *vmParams) WithMemory(memory int64) (BuildableVMParameters, error) {
+	v.memory = &memory
+	return v, nil
+}
+
+func (v *vmParams) MustWithMemory(memory int64) BuildableVMParameters {
+	builder, err := v.WithMemory(memory)
 	if err != nil {
 		panic(err)
 	}
@@ -706,6 +897,7 @@ type vm struct {
 	templateID     TemplateID
 	status         VMStatus
 	cpu            *vmCPU
+	memory         int64
 	tagIDs         []string
 	hugePages      *VMHugePages
 	initialization Initialization
@@ -746,6 +938,10 @@ func (v *vm) WaitForStatus(status VMStatus, retries ...RetryStrategy) (VM, error
 
 func (v *vm) CPU() VMCPU {
 	return v.cpu
+}
+
+func (v *vm) Memory() int64 {
+	return v.memory
 }
 
 func (v *vm) Initialization() Initialization {
@@ -866,6 +1062,9 @@ func (v *vm) Tags(retries ...RetryStrategy) ([]Tag, error) {
 func (v *vm) AddTagToVM(tagID string, retries ...RetryStrategy) error {
 	return v.client.AddTagToVM(v.id, tagID, retries...)
 }
+func (v *vm) AddTagToVMByName(tagName string, retries ...RetryStrategy) error {
+	return v.client.AddTagToVMByName(v.id, tagName, retries...)
+}
 
 var vmNameRegexp = regexp.MustCompile(`^[a-zA-Z0-9_\-.]*$`)
 
@@ -893,6 +1092,7 @@ func convertSDKVM(sdkObject *ovirtsdk.Vm, client Client) (VM, error) {
 		vmInitializationConverter,
 		vmPlacementPolicyConverter,
 		vmHostConverter,
+		vmMemoryConverter,
 	}
 	for _, converter := range vmConverters {
 		if err := converter(sdkObject, vmObject); err != nil {
@@ -997,6 +1197,15 @@ func vmHugePagesConverter(sdkObject *ovirtsdk.Vm, v *vm) error {
 		return err
 	}
 	v.hugePages = hugePages
+	return nil
+}
+
+func vmMemoryConverter(sdkObject *ovirtsdk.Vm, v *vm) error {
+	memory, ok := sdkObject.Memory()
+	if !ok {
+		return newFieldNotFound("vm", "memory")
+	}
+	v.memory = memory
 	return nil
 }
 

@@ -24,6 +24,9 @@ const ETLSError ErrorCode = "tls_error"
 // ENotFound signals that the resource requested was not found.
 const ENotFound ErrorCode = "not_found"
 
+// EMultipleResults indicates that multiple items were found where only one was expected.
+const EMultipleResults ErrorCode = "multiple_results"
+
 // EBug signals an error that should never happen. Please report this.
 const EBug ErrorCode = "bug"
 
@@ -78,6 +81,9 @@ const ELocalIO ErrorCode = "local_io_error"
 // conflicting way. For example, you tried to attach a disk that is already attached.
 const EConflict ErrorCode = "conflict"
 
+// EHotPlugFailed indicates that a disk could not be hot plugged.
+const EHotPlugFailed ErrorCode = "hot_plug_failed"
+
 // CanAutoRetry returns false if the given error code is permanent and an automatic retry should not be attempted.
 func (e ErrorCode) CanAutoRetry() bool {
 	switch e {
@@ -90,6 +96,8 @@ func (e ErrorCode) CanAutoRetry() bool {
 	case ETLSError:
 		return false
 	case ENotFound:
+		return false
+	case EMultipleResults:
 		return false
 	case EBug:
 		return false
@@ -227,12 +235,24 @@ func realIdentify(err error) EngineError {
 	var authErr *ovirtsdk.AuthError
 	var notFoundErr *ovirtsdk.NotFoundError
 	switch {
+	case strings.Contains(err.Error(), "stopped after") && strings.Contains(err.Error(), "redirects"):
+		return wrap(
+			err,
+			ENotAnOVirtEngine,
+			"the specified oVirt Engine URL has resulted in a redirect, check if your URL is correct",
+		)
 	case strings.Contains(err.Error(), "parse non-array sso with response"):
-		return wrap(err,
-			ENotAnOVirtEngine, "invalid credentials, or the URL does not point to an oVirt Engine, check your settings")
+		return wrap(
+			err,
+			ENotAnOVirtEngine,
+			"invalid credentials, or the URL does not point to an oVirt Engine, check your settings",
+		)
 	case strings.Contains(err.Error(), "server gave HTTP response to HTTPS client"):
-		return wrap(err,
-			ENotAnOVirtEngine, "the server gave a HTTP response to a HTTPS client, check if your URL is correct")
+		return wrap(
+			err,
+			ENotAnOVirtEngine,
+			"the server gave a HTTP response to a HTTPS client, check if your URL is correct",
+		)
 	case strings.Contains(err.Error(), "tls"):
 		fallthrough
 	case strings.Contains(err.Error(), "x509"):
@@ -241,6 +261,8 @@ func realIdentify(err error) EngineError {
 		return wrap(err, ENotFound, "the requested resource was not found")
 	case strings.Contains(err.Error(), "Disk is locked"):
 		return wrap(err, EDiskLocked, "the disk is locked")
+	case strings.Contains(err.Error(), "Failed to hot-plug disk"):
+		return wrap(err, EHotPlugFailed, "failed to hot-plug disk")
 	case strings.Contains(err.Error(), "Related operation is currently in progress."):
 		return wrap(err, ERelatedOperationInProgress, "a related operation is in progress")
 	case strings.Contains(err.Error(), "Disk configuration") && strings.Contains(err.Error(), " is incompatible with the storage domain type."):

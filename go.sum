@@ -553,6 +553,12 @@ github.com/ovirt/go-ovirt-client v0.7.2-0.20220325105843-66ab807d36da h1:muiSAPB
 github.com/ovirt/go-ovirt-client v0.7.2-0.20220325105843-66ab807d36da/go.mod h1:OkR+/CC42lprXXzml/nTDPYzWTiYePvuaN2Kb2xeLr0=
 github.com/ovirt/go-ovirt-client v0.7.2-0.20220405072118-3f5aa0da82d0 h1:LV8I1oEnVRPHIUxsJmQgglYo/wjVFcoJXXj+imfNXpY=
 github.com/ovirt/go-ovirt-client v0.7.2-0.20220405072118-3f5aa0da82d0/go.mod h1:OkR+/CC42lprXXzml/nTDPYzWTiYePvuaN2Kb2xeLr0=
+github.com/ovirt/go-ovirt-client v0.7.2-0.20220406125129-a70bd9dc50b5 h1:N94ebnMYcK+f9WstgDi82YKQ7IjYPnbpoqHDX8uhLVo=
+github.com/ovirt/go-ovirt-client v0.7.2-0.20220406125129-a70bd9dc50b5/go.mod h1:OkR+/CC42lprXXzml/nTDPYzWTiYePvuaN2Kb2xeLr0=
+github.com/ovirt/go-ovirt-client v0.7.2-0.20220406131424-e10db1a27bba h1:NHElVuctZ2L1WIl9d++R7fBQMnYeonDOF0IAdf57LGA=
+github.com/ovirt/go-ovirt-client v0.7.2-0.20220406131424-e10db1a27bba/go.mod h1:OkR+/CC42lprXXzml/nTDPYzWTiYePvuaN2Kb2xeLr0=
+github.com/ovirt/go-ovirt-client v0.7.2-0.20220406211054-cc952884b12e h1:pAsDiawV8BnIVLWBF7Du73P4SDf23zMrlQe89OT7FLc=
+github.com/ovirt/go-ovirt-client v0.7.2-0.20220406211054-cc952884b12e/go.mod h1:OkR+/CC42lprXXzml/nTDPYzWTiYePvuaN2Kb2xeLr0=
 github.com/ovirt/go-ovirt-client-log-klog v1.0.0 h1:xXG2M9FQifMATM5tlzyIA7qdQtcQ8P1kBoTdTt4iJGY=
 github.com/ovirt/go-ovirt-client-log-klog v1.0.0/go.mod h1:lWAyf9bu9+AkS+PKr0J2auzCsxLixDuTeYHhvLtpcLY=
 github.com/ovirt/go-ovirt-client-log/v2 v2.1.0/go.mod h1:mDoU3KIwftpsgZGzXGk5d2UEJYTY0bYMfg/GwPapXL0=

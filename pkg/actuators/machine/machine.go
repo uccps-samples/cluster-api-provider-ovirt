@@ -145,7 +145,7 @@ func (ms *machineScope) create() error {
 	if ms.machineProviderSpec.OSDisk != nil {
 		diskAttachments, err := instance.ListDiskAttachments()
 		if err != nil {
-			errors.Wrapf(err, "Failed to list disk attachments for VM %s.", instance.ID())
+			return errors.Wrapf(err, "Failed to list disk attachments for VM %s.", instance.ID())
 		}
 		for _, disk := range diskAttachments {
 			if disk.Bootable() {
@@ -175,13 +175,13 @@ func (ms *machineScope) create() error {
 	if ms.machineProviderSpec.NetworkInterfaces != nil && len(ms.machineProviderSpec.NetworkInterfaces) > 0 {
 		nics, err := instance.ListNICs()
 		if err != nil {
-			errors.Wrapf(err, "failed to list NICs on VM %s", instance.ID())
+			return errors.Wrapf(err, "failed to list NICs on VM %s", instance.ID())
 		}
 
 		//remove all the nics from the VM instance
 		for _, nic := range nics {
 			if err := nic.Remove(); err != nil {
-				errors.Wrapf(err, "failed to remove NIC %s", nic.ID())
+				return errors.Wrapf(err, "failed to remove NIC %s", nic.ID())
 			}
 		}
 
@@ -199,7 +199,7 @@ func (ms *machineScope) create() error {
 		if ms.machineProviderSpec.AutoPinningPolicy == "resize_and_pin" {
 			err = ms.ovirtClient.AutoOptimizeVMCPUPinningSettings(instance.ID(), true)
 			if err != nil {
-				errors.Wrapf(err, "failed to Optimize CPU pinning settings for VM %s", instance.ID())
+				return errors.Wrapf(err, "failed to Optimize CPU pinning settings for VM %s", instance.ID())
 			}
 		}
 	}

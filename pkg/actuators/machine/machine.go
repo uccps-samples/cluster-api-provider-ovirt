@@ -73,20 +73,27 @@ func (ms *machineScope) create() error {
 	}
 	optionalVMParams := ovirtC.CreateVMParams().MustWithInitializationParameters(string(ignition), ms.machine.Name)
 
-	// Add CPU
-	if ms.machineProviderSpec.CPU != nil {
-		optionalVMParams = optionalVMParams.MustWithCPUParameters(uint(ms.machineProviderSpec.CPU.Cores),
-			uint(ms.machineProviderSpec.CPU.Sockets),
-			uint(ms.machineProviderSpec.CPU.Threads))
+	if ms.machineProviderSpec.VMType != "" {
+		//TODO: add VMType support to the go-ovirt-client https://github.com/oVirt/go-ovirt-client/issues/162
 	}
+	if ms.machineProviderSpec.InstanceTypeId != "" {
+		//TODO: add InstanceTypeID support to the go-ovirt-client https://github.com/oVirt/go-ovirt-client/issues/163
+	} else {
+		// Add CPU
+		if ms.machineProviderSpec.CPU != nil {
+			optionalVMParams = optionalVMParams.MustWithCPUParameters(uint(ms.machineProviderSpec.CPU.Cores),
+				uint(ms.machineProviderSpec.CPU.Sockets),
+				uint(ms.machineProviderSpec.CPU.Threads))
+		}
 
-	if ms.machineProviderSpec.MemoryMB > 0 {
-		optionalVMParams = optionalVMParams.MustWithMemory(int64(ms.machineProviderSpec.MemoryMB))
-	}
+		if ms.machineProviderSpec.MemoryMB > 0 {
+			optionalVMParams = optionalVMParams.MustWithMemory(int64(ms.machineProviderSpec.MemoryMB))
+		}
 
-	if ms.machineProviderSpec.GuaranteedMemoryMB > 0 {
-		optionalMemoryPolicy := ovirtC.NewMemoryPolicyParameters().MustWithGuaranteed(int64(ms.machineProviderSpec.GuaranteedMemoryMB))
-		optionalVMParams = optionalVMParams.WithMemoryPolicy(optionalMemoryPolicy)
+		if ms.machineProviderSpec.GuaranteedMemoryMB > 0 {
+			optionalMemoryPolicy := ovirtC.NewMemoryPolicyParameters().MustWithGuaranteed(int64(ms.machineProviderSpec.GuaranteedMemoryMB))
+			optionalVMParams = optionalVMParams.WithMemoryPolicy(optionalMemoryPolicy)
+		}
 	}
 
 	isAutoPinning := false

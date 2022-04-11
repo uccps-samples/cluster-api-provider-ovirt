@@ -83,7 +83,8 @@ func (ms *machineScope) create() error {
 	}
 
 	if ms.machineProviderSpec.GuaranteedMemoryMB > 0 {
-		// TODO: add GuaranteedMemoryMB() - https://github.com/oVirt/go-ovirt-client/issues/91
+		optionalMemoryPolicy := ovirtC.NewMemoryPolicyParameters().MustWithGuaranteed(int64(ms.machineProviderSpec.GuaranteedMemoryMB))
+		optionalVMParams = optionalVMParams.WithMemoryPolicy(optionalMemoryPolicy)
 	}
 
 	isAutoPinning := false

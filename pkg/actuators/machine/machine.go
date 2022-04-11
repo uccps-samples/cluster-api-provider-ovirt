@@ -55,6 +55,7 @@ func newMachineScope(
 func (ms *machineScope) create() error {
 
 	vms, err := ms.ovirtClient.GetVMByName(ms.machine.Name)
+	clusterId := ms.machineProviderSpec.ClusterId
 
 	if err != nil {
 		return errors.Wrap(err, "error finding VM by name")
@@ -90,7 +91,24 @@ func (ms *machineScope) create() error {
 	isAutoPinning := false
 	if ms.machineProviderSpec.AutoPinningPolicy != "" {
 		isAutoPinning = true
-		//TODO: add AutoPinning PlacementPolicy - https://github.com/oVirt/go-ovirt-client/issues/137
+		hosts, err := ms.ovirtClient.ListHosts()
+		if err != nil {
+			return errors.Wrap(err, "error Listing hosts")
+		}
+
+		hostIDs := make([]string, 0)
+		for _, host := range hosts {
+			if string(host.ClusterID()) == clusterId {
+				hostIDs = append(hostIDs, host.ID())
+			}
+		}
+		if len(hostIDs) > 0 {
+			optionalPlacementPolicy, err := ovirtC.NewVMPlacementPolicyParameters().WithHostIDs(hostIDs)
+			if err != nil {
+				return errors.Wrap(err, "error creating Placement policy")
+			}
+			optionalVMParams = optionalVMParams.WithPlacementPolicy(optionalPlacementPolicy)
+		}
 	}
 
 	if ms.machineProviderSpec.Hugepages > 0 {
@@ -98,7 +116,6 @@ func (ms *machineScope) create() error {
 	}
 
 	// CREATE VM from a template
-	clusterId := ms.machineProviderSpec.ClusterId
 	templateName := ms.machineProviderSpec.TemplateName
 
 	temp, err := ms.ovirtClient.GetTemplateByName(templateName)

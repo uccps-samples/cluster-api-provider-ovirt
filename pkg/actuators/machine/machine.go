@@ -249,12 +249,6 @@ func (ms *machineScope) delete() error {
 	if err != nil {
 		return errors.Wrap(err, "error finding VM by name")
 	}
-
-	if vm == nil {
-		klog.Infof("Skipped deleting a VM that is already deleted.\n")
-		return nil
-	}
-
 	return ms.ovirtClient.RemoveVM(vm.ID())
 }
 

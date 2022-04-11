@@ -3,8 +3,6 @@ package machine
 import (
 	"context"
 	"fmt"
-	"math"
-
 	configv1 "github.com/openshift/api/config/v1"
 	machinev1 "github.com/openshift/api/machine/v1beta1"
 	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
@@ -13,6 +11,8 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog"
+	"math"
+	"regexp"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -79,7 +79,7 @@ func (ms *machineScope) create() error {
 	}
 
 	if ms.machineProviderSpec.MemoryMB > 0 {
-		// TODO: add MustWithMemory() - https://github.com/oVirt/go-ovirt-client/issues/138
+		optionalVMParams = optionalVMParams.MustWithMemory(int64(ms.machineProviderSpec.MemoryMB))
 	}
 
 	if ms.machineProviderSpec.GuaranteedMemoryMB > 0 {
@@ -186,8 +186,21 @@ func (ms *machineScope) create() error {
 		}
 	}
 
-	// TODO: attach Tag to a VM using tagName instead of ID - https://github.com/oVirt/go-ovirt-client/issues/135
-	// TODO: handleAffinityGroups -
+	err = ms.ovirtClient.AddTagToVMByName(instance.ID(), ms.machine.Labels["machine.openshift.io/cluster-api-cluster"])
+	if err != nil {
+		return errors.Wrap(err, "Failed to add tag to VM.")
+	}
+
+	for _, agName := range ms.machineProviderSpec.AffinityGroupsNames {
+		ag, err := ms.ovirtClient.GetAffinityGroupByName(ovirtC.ClusterID(clusterId), agName)
+		if err != nil {
+			return errors.Wrapf(err, "failed to Find AffinityGroup %s.", agName)
+		}
+		err = ag.AddVM(instance.ID())
+		if err != nil {
+			return errors.Wrapf(err, "failed to add VM %s to AffinityGroup %s.", instance.ID(), agName)
+		}
+	}
 
 	// Start the VM
 	err = ms.ovirtClient.StartVM(instance.ID())
@@ -313,18 +326,22 @@ func (ms *machineScope) reconcileMachineNetwork(ctx context.Context, status ovir
 		return fmt.Errorf("requeuing reconciliation, VM %s state is %s", name, status)
 	}
 	addresses := []corev1.NodeAddress{{Address: name, Type: corev1.NodeInternalDNS}}
-
 	klog.V(5).Infof("using oVirt SDK to find %s IP addresses", name)
 
 	// get API and ingress addresses that will be excluded from the node address selection
-	//excludeAddr, err := ms.getClusterAddress(ctx)
-	//if err != nil {
-	//	return errors.Wrap(err, "error getting cluster address")
-	//}
+	excludeAddr, err := ms.getClusterAddress(ctx)
+	if err != nil {
+		return errors.Wrap(err, "error getting cluster address")
+	}
 
-	// TODO: implement FindVirtualMachineIP in the client - https://github.com/oVirt/go-ovirt-client/issues/95
-	ip := "192.168.210.11"
-	var err error = nil
+	ip, err := ms.findUsableInternalAddress(ctx, vmID, excludeAddr)
+
+	if err != nil {
+		// stop reconciliation till we get IP addresses - otherwise the state will be considered stable.
+		klog.Errorf("failed to lookup the VM IP %s - skip setting addresses for this machine", err)
+		return errors.Wrap(
+			err, "failed to lookup the VM IP - skip setting addresses for this machine")
+	}
 
 	if err != nil {
 		// stop reconciliation till we get IP addresses - otherwise the state will be considered stable.
@@ -350,6 +367,28 @@ func (ms *machineScope) getClusterAddress(ctx context.Context) (map[string]int, 
 	clusterAddr[infra.Status.PlatformStatus.Ovirt.IngressIP] = 1
 
 	return clusterAddr, nil
+}
+
+func (ms *machineScope) findUsableInternalAddress(ctx context.Context, vmID string, excludeAddr map[string]int) (string, error) {
+
+	nicRegex := regexp.MustCompile(`^(eth|en|br\-ex).*`)
+	IPParams := ovirtC.NewVMIPSearchParams().WithIncludedInterfacePattern(nicRegex)
+	nics, err := ms.ovirtClient.GetVMIPAddresses(vmID, IPParams)
+	if err != nil {
+		return "", errors.Wrapf(err, "failed to get reported devices list, reason: %w", err)
+	}
+
+	for _, ipAddressSlice := range nics {
+		for _, ipAddress := range ipAddressSlice {
+			if _, ok := excludeAddr[ipAddress.String()]; ok {
+				klog.Infof("ipAddress %s is excluded from usable IPs", ipAddress)
+				continue
+			}
+			return ipAddress.String(), nil
+		}
+	}
+	return "", errors.Wrapf(err, "failed to find usable address for VM %s ", vmID)
+
 }
 
 func (ms *machineScope) reconcileMachineProviderStatus(status string, id *string) error {

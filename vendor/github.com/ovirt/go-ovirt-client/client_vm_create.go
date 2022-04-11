@@ -65,6 +65,22 @@ func vmBuilderInitialization(params OptionalVMParameters, builder *ovirtsdk.VmBu
 	}
 }
 
+func vmPlacementPolicyParameterConverter(params OptionalVMParameters, builder *ovirtsdk.VmBuilder) {
+	if pp := params.PlacementPolicy(); pp != nil {
+		placementPolicyBuilder := ovirtsdk.NewVmPlacementPolicyBuilder()
+		if affinity := (*pp).Affinity(); affinity != nil {
+			placementPolicyBuilder.Affinity(ovirtsdk.VmAffinity(*affinity))
+		}
+		hosts := make([]ovirtsdk.HostBuilder, len((*pp).HostIDs()))
+		for i, hostID := range (*pp).HostIDs() {
+			hostBuilder := ovirtsdk.NewHostBuilder().Id(hostID)
+			hosts[i] = *hostBuilder
+		}
+		placementPolicyBuilder.HostsBuilderOfAny(hosts...)
+		builder.PlacementPolicyBuilder(placementPolicyBuilder)
+	}
+}
+
 func (o *oVirtClient) CreateVM(clusterID ClusterID, templateID TemplateID, name string, params OptionalVMParameters, retries ...RetryStrategy) (result VM, err error) {
 	retries = defaultRetries(retries, defaultLongTimeouts())
 
@@ -129,6 +145,8 @@ func createSDKVM(
 		vmBuilderHugePages,
 		vmBuilderInitialization,
 		vmBuilderMemory,
+		vmPlacementPolicyParameterConverter,
+		vmBuilderMemoryPolicy,
 	}
 
 	for _, part := range parts {
@@ -164,6 +182,16 @@ func createSDKVM(
 	return vm, nil
 }
 
+func vmBuilderMemoryPolicy(params OptionalVMParameters, builder *ovirtsdk.VmBuilder) {
+	if memPolicyParams := params.MemoryPolicy(); memPolicyParams != nil {
+		memoryPolicyBuilder := ovirtsdk.NewMemoryPolicyBuilder()
+		if guaranteed := (*memPolicyParams).Guaranteed(); guaranteed != nil {
+			memoryPolicyBuilder.Guaranteed(*guaranteed)
+		}
+		builder.MemoryPolicyBuilder(memoryPolicyBuilder)
+	}
+}
+
 func validateVMCreationParameters(clusterID ClusterID, templateID TemplateID, name string, params OptionalVMParameters) error {
 	if name == "" {
 		return newError(EBadArgument, "name cannot be empty for VM creation")
@@ -176,6 +204,27 @@ func validateVMCreationParameters(clusterID ClusterID, templateID TemplateID, na
 	}
 	if params == nil {
 		return nil
+	}
+
+	memory := params.Memory()
+	if memory == nil {
+		mem := int64(1024 * 1024 * 1024)
+		memory = &mem
+	}
+	guaranteedMemory := memory
+	if memPolicy := params.MemoryPolicy(); memPolicy != nil {
+		guaranteed := (*memPolicy).Guaranteed()
+		if guaranteed != nil {
+			guaranteedMemory = guaranteed
+		}
+	}
+	if *guaranteedMemory > *memory {
+		return newError(
+			EBadArgument,
+			"guaranteed memory is larger than the VM memory (%d > %d)",
+			*guaranteedMemory,
+			*memory,
+		)
 	}
 
 	disks := params.Disks()

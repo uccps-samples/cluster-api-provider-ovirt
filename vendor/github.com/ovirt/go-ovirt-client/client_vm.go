@@ -200,6 +200,9 @@ type VMData interface {
 	CPU() VMCPU
 	// Memory return the Memory of a VM in Bytes.
 	Memory() int64
+	// MemoryPolicy returns the memory policy set on the VM, if any. The second parameter returned is true if the
+	// memory policy is set.
+	MemoryPolicy() (MemoryPolicy, bool)
 	// TagIDs returns a list of tags for this VM.
 	TagIDs() []string
 	// HugePages returns the hugepage settings for the VM, if any.
@@ -208,6 +211,50 @@ type VMData interface {
 	Initialization() Initialization
 	// HostID returns the ID of the host if available.
 	HostID() *string
+	// PlacementPolicy returns placement policy applied to this VM, if any. It may be nil if no placement policy is set.
+	// The second returned value will be false if no placement policy exists.
+	PlacementPolicy() (placementPolicy VMPlacementPolicy, ok bool)
+}
+
+// VMPlacementPolicy is the structure that holds the rules for VM migration to other hosts.
+type VMPlacementPolicy interface {
+	Affinity() *VMAffinity
+	HostIDs() []string
+}
+
+// VMAffinity is the affinity used in the placement policy on determining if a VM can be migrated to a different host.
+type VMAffinity string
+
+const (
+	// VMAffinityMigratable allows automatic and manual VM migrations to other hosts. This is the default.
+	VMAffinityMigratable VMAffinity = "migratable"
+	// VMAffinityPinned disallows migrating to other hosts.
+	VMAffinityPinned VMAffinity = "pinned"
+	// VMAffinityUserMigratable allows only manual migrations to different hosts by a user.
+	VMAffinityUserMigratable VMAffinity = "user_migratable"
+)
+
+// Validate checks the VM affinity for a valid value.
+func (v VMAffinity) Validate() error {
+	switch v {
+	case VMAffinityMigratable:
+		return nil
+	case VMAffinityPinned:
+		return nil
+	case VMAffinityUserMigratable:
+		return nil
+	default:
+		return newError(EBadArgument, "invalud value for VMAffinity: %s", v)
+	}
+}
+
+// VMAffinityValues returns a list of all valid VMAffinity values.
+func VMAffinityValues() []VMAffinity {
+	return []VMAffinity{
+		VMAffinityMigratable,
+		VMAffinityPinned,
+		VMAffinityUserMigratable,
+	}
 }
 
 // VMCPU is the CPU configuration of a VM.
@@ -569,8 +616,14 @@ type OptionalVMParameters interface {
 	// Memory returns the VM memory in Bytes.
 	Memory() *int64
 
+	// MemoryPolicy returns the memory policy configuration for this VM, if any.
+	MemoryPolicy() *MemoryPolicyParameters
+
 	// Disks returns a list of disks that are to be changed from the template.
 	Disks() []OptionalVMDiskParameters
+
+	// PlacementPolicy returns a VM placement policy to apply, if any.
+	PlacementPolicy() *VMPlacementPolicyParameters
 }
 
 // BuildableVMParameters is a variant of OptionalVMParameters that can be changed using the supplied
@@ -602,6 +655,9 @@ type BuildableVMParameters interface {
 	WithMemory(memory int64) (BuildableVMParameters, error)
 	// MustWithMemory is identical to WithMemory, but panics instead of returning an error.
 	MustWithMemory(memory int64) BuildableVMParameters
+	// WithMemoryPolicy sets the memory policy parameters for the VM.
+	WithMemoryPolicy(memory MemoryPolicyParameters) BuildableVMParameters
+
 	// WithInitialization sets the virtual machine’s initialization configuration.
 	WithInitialization(initialization Initialization) (BuildableVMParameters, error)
 	// MustWithInitialization is identical to WithInitialization, but panics instead of returning an error.
@@ -619,6 +675,134 @@ type BuildableVMParameters interface {
 	WithDisks(disks []OptionalVMDiskParameters) (BuildableVMParameters, error)
 	// MustWithDisks is identical to WithDisks, but panics instead of returning an error.
 	MustWithDisks(disks []OptionalVMDiskParameters) BuildableVMParameters
+
+	// WithPlacementPolicy adds a placement policy dictating which hosts the VM can be migrated to.
+	WithPlacementPolicy(placementPolicy VMPlacementPolicyParameters) BuildableVMParameters
+}
+
+// VMPlacementPolicyParameters contains the optional parameters on VM placement.
+type VMPlacementPolicyParameters interface {
+	// Affinity dictates how a VM can be migrated to a different host. This can be nil, in which case the engine
+	// default is to set the policy to migratable.
+	Affinity() *VMAffinity
+	// HostIDs returns a list of host IDs to apply as possible migration targets. The default is an empty list,
+	// which means the VM can be migrated to any host.
+	HostIDs() []string
+}
+
+// BuildableVMPlacementPolicyParameters is a buildable version of the VMPlacementPolicyParameters.
+type BuildableVMPlacementPolicyParameters interface {
+	VMPlacementPolicyParameters
+
+	// WithAffinity sets the way VMs can be migrated to other hosts.
+	WithAffinity(affinity VMAffinity) (BuildableVMPlacementPolicyParameters, error)
+	// MustWithAffinity is identical to WithAffinity, but panics instead of returning an error.
+	MustWithAffinity(affinity VMAffinity) BuildableVMPlacementPolicyParameters
+
+	// WithHostIDs sets the list of hosts this VM can be migrated to.
+	WithHostIDs(hostIDs []string) (BuildableVMPlacementPolicyParameters, error)
+	// MustWithHostIDs is identical to WithHostIDs, but panics instead of returning an error.
+	MustWithHostIDs(hostIDs []string) BuildableVMPlacementPolicyParameters
+}
+
+// NewVMPlacementPolicyParameters creates a new BuildableVMPlacementPolicyParameters for use on VM creation.
+func NewVMPlacementPolicyParameters() BuildableVMPlacementPolicyParameters {
+	return &vmPlacementPolicyParameters{}
+}
+
+type vmPlacementPolicyParameters struct {
+	affinity *VMAffinity
+	hostIDs  []string
+}
+
+func (v vmPlacementPolicyParameters) Affinity() *VMAffinity {
+	return v.affinity
+}
+
+func (v vmPlacementPolicyParameters) HostIDs() []string {
+	return v.hostIDs
+}
+
+func (v vmPlacementPolicyParameters) WithAffinity(affinity VMAffinity) (BuildableVMPlacementPolicyParameters, error) {
+	if err := affinity.Validate(); err != nil {
+		return nil, err
+	}
+	v.affinity = &affinity
+	return v, nil
+}
+
+func (v vmPlacementPolicyParameters) MustWithAffinity(affinity VMAffinity) BuildableVMPlacementPolicyParameters {
+	builder, err := v.WithAffinity(affinity)
+	if err != nil {
+		panic(err)
+	}
+	return builder
+}
+
+func (v vmPlacementPolicyParameters) WithHostIDs(hostIDs []string) (BuildableVMPlacementPolicyParameters, error) {
+	v.hostIDs = hostIDs
+	return v, nil
+}
+
+func (v vmPlacementPolicyParameters) MustWithHostIDs(hostIDs []string) BuildableVMPlacementPolicyParameters {
+	builder, err := v.WithHostIDs(hostIDs)
+	if err != nil {
+		panic(err)
+	}
+	return builder
+}
+
+// MemoryPolicyParameters contain the parameters for the memory policy setting on the VM.
+type MemoryPolicyParameters interface {
+	Guaranteed() *int64
+}
+
+// BuildableMemoryPolicyParameters is a buildable version of MemoryPolicyParameters.
+type BuildableMemoryPolicyParameters interface {
+	MemoryPolicyParameters
+
+	WithGuaranteed(guaranteed int64) (BuildableMemoryPolicyParameters, error)
+	MustWithGuaranteed(guaranteed int64) BuildableMemoryPolicyParameters
+}
+
+// NewMemoryPolicyParameters creates a new instance of BuildableMemoryPolicyParameters.
+func NewMemoryPolicyParameters() BuildableMemoryPolicyParameters {
+	return &memoryPolicyParameters{}
+}
+
+type memoryPolicyParameters struct {
+	guaranteed *int64
+}
+
+func (m *memoryPolicyParameters) MustWithGuaranteed(guaranteed int64) BuildableMemoryPolicyParameters {
+	builder, err := m.WithGuaranteed(guaranteed)
+	if err != nil {
+		panic(err)
+	}
+	return builder
+}
+
+func (m *memoryPolicyParameters) Guaranteed() *int64 {
+	return m.guaranteed
+}
+
+func (m *memoryPolicyParameters) WithGuaranteed(guaranteed int64) (BuildableMemoryPolicyParameters, error) {
+	m.guaranteed = &guaranteed
+	return m, nil
+}
+
+// MemoryPolicy is the memory policy set on the VM.
+type MemoryPolicy interface {
+	// Guaranteed returns the number of guaranteed bytes to the VM.
+	Guaranteed() *int64
+}
+
+type memoryPolicy struct {
+	guaranteed *int64
+}
+
+func (m memoryPolicy) Guaranteed() *int64 {
+	return m.guaranteed
 }
 
 // OptionalVMDiskParameters describes the disk parameters that can be given to VM creation. These manipulate the
@@ -872,10 +1056,31 @@ type vmParams struct {
 
 	initialization Initialization
 	memory         *int64
+	memoryPolicy   *MemoryPolicyParameters
 
 	clone *bool
 
 	disks []OptionalVMDiskParameters
+
+	placementPolicy *VMPlacementPolicyParameters
+}
+
+func (v *vmParams) WithPlacementPolicy(placementPolicy VMPlacementPolicyParameters) BuildableVMParameters {
+	v.placementPolicy = &placementPolicy
+	return v
+}
+
+func (v *vmParams) PlacementPolicy() *VMPlacementPolicyParameters {
+	return v.placementPolicy
+}
+
+func (v *vmParams) MemoryPolicy() *MemoryPolicyParameters {
+	return v.memoryPolicy
+}
+
+func (v *vmParams) WithMemoryPolicy(memory MemoryPolicyParameters) BuildableVMParameters {
+	v.memoryPolicy = &memory
+	return v
 }
 
 func (v *vmParams) Clone() *bool {
@@ -1052,18 +1257,28 @@ func (v vmParams) Comment() string {
 type vm struct {
 	client Client
 
-	id             string
-	name           string
-	comment        string
-	clusterID      ClusterID
-	templateID     TemplateID
-	status         VMStatus
-	cpu            *vmCPU
-	memory         int64
-	tagIDs         []string
-	hugePages      *VMHugePages
-	initialization Initialization
-	hostID         *string
+	id              string
+	name            string
+	comment         string
+	clusterID       ClusterID
+	templateID      TemplateID
+	status          VMStatus
+	cpu             *vmCPU
+	memory          int64
+	tagIDs          []string
+	hugePages       *VMHugePages
+	initialization  Initialization
+	hostID          *string
+	placementPolicy *vmPlacementPolicy
+	memoryPolicy    *memoryPolicy
+}
+
+func (v *vm) PlacementPolicy() (VMPlacementPolicy, bool) {
+	return v.placementPolicy, v.placementPolicy != nil
+}
+
+func (v *vm) MemoryPolicy() (MemoryPolicy, bool) {
+	return v.memoryPolicy, v.memoryPolicy != nil
 }
 
 func (v *vm) WaitForIPAddresses(params VMIPSearchParams, retries ...RetryStrategy) (map[string][]net.IP, error) {
@@ -1126,14 +1341,21 @@ func (v *vm) Initialization() Initialization {
 // shared state issues.
 func (v *vm) withName(name string) *vm {
 	return &vm{
-		client:     v.client,
-		id:         v.id,
-		name:       name,
-		comment:    v.comment,
-		clusterID:  v.clusterID,
-		templateID: v.templateID,
-		status:     v.status,
-		cpu:        v.cpu,
+		v.client,
+		v.id,
+		name,
+		v.comment,
+		v.clusterID,
+		v.templateID,
+		v.status,
+		v.cpu,
+		v.memory,
+		v.tagIDs,
+		v.hugePages,
+		v.initialization,
+		v.hostID,
+		v.placementPolicy,
+		v.memoryPolicy,
 	}
 }
 
@@ -1141,14 +1363,21 @@ func (v *vm) withName(name string) *vm {
 // shared state issues.
 func (v *vm) withComment(comment string) *vm {
 	return &vm{
-		client:     v.client,
-		id:         v.id,
-		name:       v.name,
-		comment:    comment,
-		clusterID:  v.clusterID,
-		templateID: v.templateID,
-		status:     v.status,
-		cpu:        v.cpu,
+		v.client,
+		v.id,
+		v.name,
+		comment,
+		v.clusterID,
+		v.templateID,
+		v.status,
+		v.cpu,
+		v.memory,
+		v.tagIDs,
+		v.hugePages,
+		v.initialization,
+		v.hostID,
+		v.placementPolicy,
+		v.memoryPolicy,
 	}
 }
 
@@ -1267,6 +1496,7 @@ func convertSDKVM(sdkObject *ovirtsdk.Vm, client Client) (VM, error) {
 		vmPlacementPolicyConverter,
 		vmHostConverter,
 		vmMemoryConverter,
+		vmMemoryPolicyConverter,
 	}
 	for _, converter := range vmConverters {
 		if err := converter(sdkObject, vmObject); err != nil {
@@ -1275,6 +1505,25 @@ func convertSDKVM(sdkObject *ovirtsdk.Vm, client Client) (VM, error) {
 	}
 
 	return vmObject, nil
+}
+
+func vmMemoryPolicyConverter(object *ovirtsdk.Vm, v *vm) error {
+	if memPolicy, ok := object.MemoryPolicy(); ok {
+		resultMemPolicy := &memoryPolicy{}
+		if guaranteed, ok := memPolicy.Guaranteed(); ok {
+			if guaranteed < -1 {
+				return newError(
+					EBug,
+					"the engine returned a negative guaranteed memory value for VM %s (%d)",
+					object.MustId(),
+					guaranteed,
+				)
+			}
+			resultMemPolicy.guaranteed = &guaranteed
+		}
+		v.memoryPolicy = resultMemPolicy
+	}
+	return nil
 }
 
 func vmHostConverter(sdkObject *ovirtsdk.Vm, v *vm) error {
@@ -1287,9 +1536,22 @@ func vmHostConverter(sdkObject *ovirtsdk.Vm, v *vm) error {
 }
 
 func vmPlacementPolicyConverter(sdkObject *ovirtsdk.Vm, v *vm) error {
-
-	if vmPlacementPolicy, ok := sdkObject.PlacementPolicy(); ok {
-		vmPlacementPolicy.Affinity()
+	if pp, ok := sdkObject.PlacementPolicy(); ok {
+		placementPolicy := &vmPlacementPolicy{}
+		affinity, ok := pp.Affinity()
+		if ok {
+			a := VMAffinity(affinity)
+			placementPolicy.affinity = &a
+		}
+		hosts, ok := pp.Hosts()
+		if ok {
+			hostIDs := make([]string, len(hosts.Slice()))
+			for i, host := range hosts.Slice() {
+				hostIDs[i] = host.MustId()
+			}
+			placementPolicy.hostIDs = hostIDs
+		}
+		v.placementPolicy = placementPolicy
 	}
 	return nil
 }
@@ -1489,6 +1751,19 @@ const (
 	// It is possible that the virtual machine process will fail to run.
 	VMStatusWaitForLaunch VMStatus = "wait_for_launch"
 )
+
+type vmPlacementPolicy struct {
+	affinity *VMAffinity
+	hostIDs  []string
+}
+
+func (v vmPlacementPolicy) Affinity() *VMAffinity {
+	return v.affinity
+}
+
+func (v vmPlacementPolicy) HostIDs() []string {
+	return v.hostIDs
+}
 
 // Validate validates if a VMStatus has a valid value.
 func (s VMStatus) Validate() error {

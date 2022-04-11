@@ -559,6 +559,8 @@ github.com/ovirt/go-ovirt-client v0.7.2-0.20220406131424-e10db1a27bba h1:NHElVuc
 github.com/ovirt/go-ovirt-client v0.7.2-0.20220406131424-e10db1a27bba/go.mod h1:OkR+/CC42lprXXzml/nTDPYzWTiYePvuaN2Kb2xeLr0=
 github.com/ovirt/go-ovirt-client v0.7.2-0.20220406211054-cc952884b12e h1:pAsDiawV8BnIVLWBF7Du73P4SDf23zMrlQe89OT7FLc=
 github.com/ovirt/go-ovirt-client v0.7.2-0.20220406211054-cc952884b12e/go.mod h1:OkR+/CC42lprXXzml/nTDPYzWTiYePvuaN2Kb2xeLr0=
+github.com/ovirt/go-ovirt-client v0.9.0 h1:G/5mvQQws8SyYgR6TrVQAb8hMUHCvy7n8wySyL33/Fc=
+github.com/ovirt/go-ovirt-client v0.9.0/go.mod h1:OkR+/CC42lprXXzml/nTDPYzWTiYePvuaN2Kb2xeLr0=
 github.com/ovirt/go-ovirt-client-log-klog v1.0.0 h1:xXG2M9FQifMATM5tlzyIA7qdQtcQ8P1kBoTdTt4iJGY=
 github.com/ovirt/go-ovirt-client-log-klog v1.0.0/go.mod h1:lWAyf9bu9+AkS+PKr0J2auzCsxLixDuTeYHhvLtpcLY=
 github.com/ovirt/go-ovirt-client-log/v2 v2.1.0/go.mod h1:mDoU3KIwftpsgZGzXGk5d2UEJYTY0bYMfg/GwPapXL0=

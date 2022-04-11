@@ -125,6 +125,30 @@ func (ms *machineScope) create() error {
 		return errors.Wrapf(err, "error finding template name %s.", templateName)
 	}
 
+	// Handle Sparse disks and Format
+	if ms.machineProviderSpec.Sparse != nil || ms.machineProviderSpec.Format != "" {
+		tempDiskAttachment, err := ms.ovirtClient.ListTemplateDiskAttachments(temp.ID())
+		if err != nil {
+			return errors.Wrapf(err, "failed to fetch template %s disk attachments from oVirt Engine",
+				ms.machineProviderSpec.TemplateName)
+		}
+
+		diskParams := []ovirtC.OptionalVMDiskParameters{}
+		for _, diskAttachment := range tempDiskAttachment {
+			diskBuilder, _ := ovirtC.NewBuildableVMDiskParameters(diskAttachment.DiskID())
+			if ms.machineProviderSpec.Sparse != nil {
+				diskBuilder.MustWithSparse(*ms.machineProviderSpec.Sparse)
+			}
+
+			if ms.machineProviderSpec.Format != "" {
+				diskBuilder.MustWithFormat(ovirtC.ImageFormat(ms.machineProviderSpec.Format))
+			}
+
+			diskParams = append(diskParams, diskBuilder)
+		}
+		optionalVMParams = optionalVMParams.MustWithDisks(diskParams)
+	}
+
 	// Handle Disk Clone
 	if ms.machineProviderSpec.Clone != nil {
 		optionalVMParams = optionalVMParams.MustWithClone(true)

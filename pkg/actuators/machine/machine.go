@@ -290,6 +290,9 @@ func (ms *machineScope) exists() (bool, error) {
 func (ms *machineScope) delete() error {
 	vm, err := ms.ovirtClient.GetVMByName(ms.machine.Name, ovirtC.ContextStrategy(ms.Context))
 	if err != nil {
+		if ovirtC.HasErrorCode(err, ovirtC.ENotFound) {
+			return nil
+		}
 		return errors.Wrap(err, "error finding VM by name")
 	}
 	return ms.ovirtClient.RemoveVM(vm.ID(), ovirtC.ContextStrategy(ms.Context))

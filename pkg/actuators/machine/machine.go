@@ -23,6 +23,7 @@ const (
 	userDataSecretKey           = "userData"
 	// GlobalInfrastuctureName default name for infrastructure object
 	globalInfrastuctureName = "cluster"
+	BytesInMB               = 1048576
 )
 
 type machineScope struct {
@@ -88,11 +89,11 @@ func (ms *machineScope) create() error {
 		}
 
 		if ms.machineProviderSpec.MemoryMB > 0 {
-			optionalVMParams = optionalVMParams.MustWithMemory(int64(ms.machineProviderSpec.MemoryMB))
+			optionalVMParams = optionalVMParams.MustWithMemory(int64(BytesInMB) * int64(ms.machineProviderSpec.MemoryMB))
 		}
 
 		if ms.machineProviderSpec.GuaranteedMemoryMB > 0 {
-			optionalMemoryPolicy := ovirtC.NewMemoryPolicyParameters().MustWithGuaranteed(int64(ms.machineProviderSpec.GuaranteedMemoryMB))
+			optionalMemoryPolicy := ovirtC.NewMemoryPolicyParameters().MustWithGuaranteed(int64(BytesInMB) * int64(ms.machineProviderSpec.GuaranteedMemoryMB))
 			optionalVMParams = optionalVMParams.WithMemoryPolicy(optionalMemoryPolicy)
 		}
 	}

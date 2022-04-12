@@ -100,24 +100,28 @@ func (ms *machineScope) create() error {
 
 	isAutoPinning := false
 	if ms.machineProviderSpec.AutoPinningPolicy != "" {
-		isAutoPinning = true
-		hosts, err := ms.ovirtClient.ListHosts(ovirtC.ContextStrategy(ms.Context))
-		if err != nil {
-			return errors.Wrap(err, "error Listing hosts")
-		}
 
-		hostIDs := make([]string, 0)
-		for _, host := range hosts {
-			if string(host.ClusterID()) == clusterId {
-				hostIDs = append(hostIDs, host.ID())
-			}
-		}
-		if len(hostIDs) > 0 {
-			optionalPlacementPolicy, err := ovirtC.NewVMPlacementPolicyParameters().WithHostIDs(hostIDs)
+		if ms.machineProviderSpec.AutoPinningPolicy == "resize_and_pin" {
+
+			isAutoPinning = true
+			hosts, err := ms.ovirtClient.ListHosts(ovirtC.ContextStrategy(ms.Context))
 			if err != nil {
-				return errors.Wrap(err, "error creating Placement policy")
+				return errors.Wrap(err, "error Listing hosts")
 			}
-			optionalVMParams = optionalVMParams.WithPlacementPolicy(optionalPlacementPolicy)
+
+			hostIDs := make([]string, 0)
+			for _, host := range hosts {
+				if string(host.ClusterID()) == clusterId {
+					hostIDs = append(hostIDs, host.ID())
+				}
+			}
+			if len(hostIDs) > 0 {
+				optionalPlacementPolicy, err := ovirtC.NewVMPlacementPolicyParameters().WithHostIDs(hostIDs)
+				if err != nil {
+					return errors.Wrap(err, "error creating Placement policy")
+				}
+				optionalVMParams = optionalVMParams.WithPlacementPolicy(optionalPlacementPolicy)
+			}
 		}
 	}
 
@@ -241,11 +245,9 @@ func (ms *machineScope) create() error {
 	}
 
 	if isAutoPinning {
-		if ms.machineProviderSpec.AutoPinningPolicy == "resize_and_pin" {
-			err = ms.ovirtClient.AutoOptimizeVMCPUPinningSettings(instance.ID(), true, ovirtC.ContextStrategy(ms.Context))
-			if err != nil {
-				return errors.Wrapf(err, "failed to Optimize CPU pinning settings for VM %s", instance.ID())
-			}
+		err = ms.ovirtClient.AutoOptimizeVMCPUPinningSettings(instance.ID(), true, ovirtC.ContextStrategy(ms.Context))
+		if err != nil {
+			return errors.Wrapf(err, "failed to Optimize CPU pinning settings for VM %s", instance.ID())
 		}
 	}
 

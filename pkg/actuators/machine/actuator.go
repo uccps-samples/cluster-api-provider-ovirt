@@ -7,12 +7,10 @@ package machine
 
 import (
 	"context"
-	"fmt"
 	machinev1 "github.com/openshift/api/machine/v1beta1"
 	"github.com/openshift/client-go/machine/clientset/versioned/typed/machine/v1beta1"
 	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
-	ovirtC "github.com/openshift/cluster-api-provider-ovirt/pkg/clients/ovirt"
-	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
+	common "github.com/openshift/cluster-api-provider-ovirt/pkg/controllers"
 	apierrors "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	ovirtclient "github.com/ovirt/go-ovirt-client"
 	"github.com/pkg/errors"
@@ -174,12 +172,9 @@ func (actuator *OvirtActuator) handleMachineError(machine *machinev1.Machine, re
 // getClient returns a a client to oVirt's API endpoint
 func (actuator *OvirtActuator) getClient() (ovirtclient.Client, error) {
 	if actuator.ovirtClient == nil || actuator.ovirtClient.Test() != nil {
-		creds, err := ovirtC.GetCredentialsSecret(actuator.client, utils.NAMESPACE, utils.OvirtCloudCredsSecretName)
-		if err != nil {
-			return nil, fmt.Errorf("failed getting credentials for namespace %s, %w", utils.NAMESPACE, err)
-		}
+		var err error
 		// session expired or some other error, re-login.
-		actuator.ovirtClient, err = ovirtC.NewClient(creds)
+		actuator.ovirtClient, err = common.GetoVirtClient(actuator.client)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed creating ovirt connection")
 		}

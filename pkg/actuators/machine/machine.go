@@ -7,7 +7,6 @@ import (
 	machinev1 "github.com/openshift/api/machine/v1beta1"
 	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
-	ovirtsdk "github.com/ovirt/go-ovirt"
 	ovirtC "github.com/ovirt/go-ovirt-client"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -166,7 +165,7 @@ func (ms *machineScope) create() error {
 	if ms.machineProviderSpec.Clone != nil {
 		optionalVMParams = optionalVMParams.MustWithClone(true)
 	} else {
-		if ms.machineProviderSpec.VMType == string(ovirtsdk.VMTYPE_DESKTOP) {
+		if ms.machineProviderSpec.VMType == string(ovirtC.VMTypeDesktop) {
 			optionalVMParams = optionalVMParams.MustWithClone(false)
 		} else {
 			optionalVMParams = optionalVMParams.MustWithClone(true)

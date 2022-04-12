@@ -2,12 +2,12 @@ package ovirt
 
 import (
 	"fmt"
+	ovirtclient "github.com/ovirt/go-ovirt-client"
+	kloglogger "github.com/ovirt/go-ovirt-client-log-klog"
 	"time"
 
 	"github.com/go-logr/logr"
-	ovirtClient "github.com/openshift/cluster-api-provider-ovirt/pkg/clients/ovirt"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
-	ovirtsdk "github.com/ovirt/go-ovirt"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
@@ -27,22 +27,50 @@ func ResultNoRequeue() reconcile.Result {
 }
 
 type BaseController struct {
-	Log             logr.Logger
-	Client          client.Client
-	ovirtConnection *ovirtsdk.Connection
+	Log         logr.Logger
+	Client      client.Client
+	ovirtClient ovirtclient.Client
 }
 
-func (b *BaseController) GetConnection() (*ovirtsdk.Connection, error) {
-	if b.ovirtConnection == nil || b.ovirtConnection.Test() != nil {
-		creds, err := ovirtClient.GetCredentialsSecret(b.Client, utils.NAMESPACE, utils.OvirtCloudCredsSecretName)
-		if err != nil {
-			return nil, fmt.Errorf("failed getting credentials for namespace %s, %w", utils.NAMESPACE, err)
-		}
+// getClient returns a a client to oVirt's API endpoint
+func (b *BaseController) GetoVirtClient() (ovirtclient.Client, error) {
+	if b.ovirtClient == nil || b.ovirtClient.Test() != nil {
+		var err error
 		// session expired or some other error, re-login.
-		b.ovirtConnection, err = ovirtClient.CreateAPIConnection(creds)
+		b.ovirtClient, err = GetoVirtClient(b.Client)
 		if err != nil {
 			return nil, fmt.Errorf("failed creating ovirt connection %w", err)
 		}
 	}
-	return b.ovirtConnection, nil
+	return b.ovirtClient, nil
+}
+
+// NewClient returns a ovirt client  by using the given credentials
+func GetoVirtClient(k8sClient client.Client) (ovirtclient.Client, error) {
+	creds, err := GetCredentialsSecret(k8sClient, utils.NAMESPACE, utils.OvirtCloudCredsSecretName)
+	if err != nil {
+		return nil, fmt.Errorf("failed getting credentials for namespace %s, %w", utils.NAMESPACE, err)
+	}
+
+	tls := ovirtclient.TLS()
+	if creds.Insecure {
+		tls.Insecure()
+	} else {
+		if creds.CAFile != "" {
+			tls.CACertsFromFile(creds.CAFile)
+		}
+		if creds.CABundle != "" {
+			tls.CACertsFromMemory([]byte(creds.CABundle))
+		}
+		tls.CACertsFromSystem()
+	}
+	logger := kloglogger.New()
+	return ovirtclient.New(
+		creds.URL,
+		creds.Username,
+		creds.Password,
+		tls,
+		logger,
+		nil,
+	)
 }

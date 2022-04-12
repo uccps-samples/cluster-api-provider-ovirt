@@ -4,13 +4,10 @@ go 1.17
 
 require (
 	github.com/go-logr/logr v0.4.0
-	github.com/golang/mock v1.6.0
-	github.com/onsi/gomega v1.14.0
 	github.com/openshift/api v0.0.0-20211025104849-a11323ccb6ea
 	github.com/openshift/client-go v0.0.0-20211025111749-96ca2abfc56c
 	github.com/openshift/machine-api-operator v0.2.1-0.20211111133920-c8bba3e64310
-	github.com/ovirt/go-ovirt v0.0.0-20210809163552-d4276e35d3db
-	github.com/ovirt/go-ovirt-client v0.9.1-0.20220411191137-99c59d46262f
+	github.com/ovirt/go-ovirt-client v1.0.0-alpha1
 	github.com/ovirt/go-ovirt-client-log-klog v1.0.0
 	github.com/pkg/errors v0.9.1
 	k8s.io/api v0.22.1
@@ -65,6 +62,8 @@ require (
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.1 // indirect
 	github.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00 // indirect
+	github.com/onsi/gomega v1.14.0 // indirect
+	github.com/ovirt/go-ovirt v0.0.0-20210809163552-d4276e35d3db // indirect
 	github.com/ovirt/go-ovirt-client-log/v2 v2.2.0 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect

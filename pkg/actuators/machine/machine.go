@@ -74,10 +74,10 @@ func (ms *machineScope) create() error {
 	optionalVMParams := ovirtC.CreateVMParams().MustWithInitializationParameters(string(ignition), ms.machine.Name)
 
 	if ms.machineProviderSpec.VMType != "" {
-		//TODO: add VMType support to the go-ovirt-client https://github.com/oVirt/go-ovirt-client/issues/162
+		optionalVMParams = optionalVMParams.MustWithVMType(ovirtC.VMType(ms.machineProviderSpec.VMType))
 	}
 	if ms.machineProviderSpec.InstanceTypeId != "" {
-		//TODO: add InstanceTypeID support to the go-ovirt-client https://github.com/oVirt/go-ovirt-client/issues/163
+		optionalVMParams = optionalVMParams.MustWithInstanceTypeID(ovirtC.InstanceTypeID(ms.machineProviderSpec.InstanceTypeId))
 	} else {
 		// Add CPU
 		if ms.machineProviderSpec.CPU != nil {

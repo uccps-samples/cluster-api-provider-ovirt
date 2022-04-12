@@ -55,7 +55,7 @@ func newMachineScope(
 // create creates an oVirt VM from the machine object if it does not exists.
 func (ms *machineScope) create() error {
 
-	vms, err := ms.ovirtClient.GetVMByName(ms.machine.Name)
+	vms, err := ms.ovirtClient.GetVMByName(ms.machine.Name, ovirtC.ContextStrategy(ms.Context))
 	clusterId := ms.machineProviderSpec.ClusterId
 
 	if err != nil {
@@ -99,7 +99,7 @@ func (ms *machineScope) create() error {
 	isAutoPinning := false
 	if ms.machineProviderSpec.AutoPinningPolicy != "" {
 		isAutoPinning = true
-		hosts, err := ms.ovirtClient.ListHosts()
+		hosts, err := ms.ovirtClient.ListHosts(ovirtC.ContextStrategy(ms.Context))
 		if err != nil {
 			return errors.Wrap(err, "error Listing hosts")
 		}
@@ -126,7 +126,7 @@ func (ms *machineScope) create() error {
 	// CREATE VM from a template
 	templateName := ms.machineProviderSpec.TemplateName
 
-	temp, err := ms.ovirtClient.GetTemplateByName(templateName)
+	temp, err := ms.ovirtClient.GetTemplateByName(templateName, ovirtC.ContextStrategy(ms.Context))
 
 	if err != nil {
 		return errors.Wrapf(err, "error finding template name %s.", templateName)
@@ -134,7 +134,7 @@ func (ms *machineScope) create() error {
 
 	// Handle Sparse disks and Format
 	if ms.machineProviderSpec.Sparse != nil || ms.machineProviderSpec.Format != "" {
-		tempDiskAttachment, err := ms.ovirtClient.ListTemplateDiskAttachments(temp.ID())
+		tempDiskAttachment, err := ms.ovirtClient.ListTemplateDiskAttachments(temp.ID(), ovirtC.ContextStrategy(ms.Context))
 		if err != nil {
 			return errors.Wrapf(err, "failed to fetch template %s disk attachments from oVirt Engine",
 				ms.machineProviderSpec.TemplateName)
@@ -170,14 +170,14 @@ func (ms *machineScope) create() error {
 	instance, err := ms.ovirtClient.CreateVM(ovirtC.ClusterID(clusterId),
 		temp.ID(),
 		ms.machine.Name,
-		optionalVMParams)
+		optionalVMParams, ovirtC.ContextStrategy(ms.Context))
 
 	if err != nil {
 		return errors.Wrap(err, "error creating Ovirt instance")
 	}
 
 	// Wait till ready
-	_, err = ms.ovirtClient.WaitForVMStatus(instance.ID(), ovirtC.VMStatusDown)
+	_, err = ms.ovirtClient.WaitForVMStatus(instance.ID(), ovirtC.VMStatusDown, ovirtC.ContextStrategy(ms.Context))
 	if err != nil {
 		return errors.Wrap(err, "error creating oVirt VM")
 	}
@@ -200,7 +200,7 @@ func (ms *machineScope) create() error {
 			return errors.Wrapf(err, "VM %s(%s) doesn't have a bootable disk", instance.Name(), instance.ID())
 		}
 
-		disk, err := ms.ovirtClient.GetDisk(bootableDiskAttachment.DiskID())
+		disk, err := ms.ovirtClient.GetDisk(bootableDiskAttachment.DiskID(), ovirtC.ContextStrategy(ms.Context))
 		if newDiskSize > disk.ProvisionedSize() {
 			updatedDisk, err := disk.Update(ovirtC.UpdateDiskParams().MustWithProvisionedSize(newDiskSize))
 			if err != nil {
@@ -240,20 +240,20 @@ func (ms *machineScope) create() error {
 
 	if isAutoPinning {
 		if ms.machineProviderSpec.AutoPinningPolicy == "resize_and_pin" {
-			err = ms.ovirtClient.AutoOptimizeVMCPUPinningSettings(instance.ID(), true)
+			err = ms.ovirtClient.AutoOptimizeVMCPUPinningSettings(instance.ID(), true, ovirtC.ContextStrategy(ms.Context))
 			if err != nil {
 				return errors.Wrapf(err, "failed to Optimize CPU pinning settings for VM %s", instance.ID())
 			}
 		}
 	}
 
-	err = ms.ovirtClient.AddTagToVMByName(instance.ID(), ms.machine.Labels["machine.openshift.io/cluster-api-cluster"])
+	err = ms.ovirtClient.AddTagToVMByName(instance.ID(), ms.machine.Labels["machine.openshift.io/cluster-api-cluster"], ovirtC.ContextStrategy(ms.Context))
 	if err != nil {
 		return errors.Wrap(err, "Failed to add tag to VM.")
 	}
 
 	for _, agName := range ms.machineProviderSpec.AffinityGroupsNames {
-		ag, err := ms.ovirtClient.GetAffinityGroupByName(ovirtC.ClusterID(clusterId), agName)
+		ag, err := ms.ovirtClient.GetAffinityGroupByName(ovirtC.ClusterID(clusterId), agName, ovirtC.ContextStrategy(ms.Context))
 		if err != nil {
 			return errors.Wrapf(err, "failed to Find AffinityGroup %s.", agName)
 		}
@@ -264,13 +264,13 @@ func (ms *machineScope) create() error {
 	}
 
 	// Start the VM
-	err = ms.ovirtClient.StartVM(instance.ID())
+	err = ms.ovirtClient.StartVM(instance.ID(), ovirtC.ContextStrategy(ms.Context))
 	if err != nil {
 		return errors.Wrap(err, "error running oVirt VM")
 	}
 
 	// Wait till running
-	_, err = ms.ovirtClient.WaitForVMStatus(instance.ID(), ovirtC.VMStatusUp)
+	_, err = ms.ovirtClient.WaitForVMStatus(instance.ID(), ovirtC.VMStatusUp, ovirtC.ContextStrategy(ms.Context))
 	if err != nil {
 		return errors.Wrap(err, "Error waiting for oVirt VM to be UP")
 	}
@@ -279,7 +279,7 @@ func (ms *machineScope) create() error {
 
 // exists returns true if machine exists.
 func (ms *machineScope) exists() (bool, error) {
-	vm, err := ms.ovirtClient.GetVMByName(ms.machine.Name)
+	vm, err := ms.ovirtClient.GetVMByName(ms.machine.Name, ovirtC.ContextStrategy(ms.Context))
 	if err != nil {
 		return false, errors.Wrap(err, "error finding VM by name")
 	}
@@ -288,11 +288,11 @@ func (ms *machineScope) exists() (bool, error) {
 
 // delete deletes the VM which corresponds with the machine object from the oVirt engine
 func (ms *machineScope) delete() error {
-	vm, err := ms.ovirtClient.GetVMByName(ms.machine.Name)
+	vm, err := ms.ovirtClient.GetVMByName(ms.machine.Name, ovirtC.ContextStrategy(ms.Context))
 	if err != nil {
 		return errors.Wrap(err, "error finding VM by name")
 	}
-	return ms.ovirtClient.RemoveVM(vm.ID())
+	return ms.ovirtClient.RemoveVM(vm.ID(), ovirtC.ContextStrategy(ms.Context))
 }
 
 // returns the ignition from the userData secret
@@ -319,7 +319,7 @@ func (ms *machineScope) getIgnition() ([]byte, error) {
 }
 
 func (ms *machineScope) reconcileMachine(ctx context.Context) error {
-	instance, err := ms.ovirtClient.GetVMByName(ms.machine.Name)
+	instance, err := ms.ovirtClient.GetVMByName(ms.machine.Name, ovirtC.ContextStrategy(ms.Context))
 
 	if err != nil {
 		return errors.Wrap(err, "error finding VM by name")
@@ -428,7 +428,7 @@ func (ms *machineScope) findUsableInternalAddress(ctx context.Context, vmID stri
 
 	nicRegex := regexp.MustCompile(`^(eth|en|br\-ex).*`)
 	IPParams := ovirtC.NewVMIPSearchParams().WithIncludedInterfacePattern(nicRegex)
-	nics, err := ms.ovirtClient.GetVMIPAddresses(vmID, IPParams)
+	nics, err := ms.ovirtClient.GetVMIPAddresses(vmID, IPParams, ovirtC.ContextStrategy(ms.Context))
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to get reported devices list, reason: %w", err)
 	}

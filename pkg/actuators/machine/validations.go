@@ -45,10 +45,10 @@ func validateMachine(ovirtClient ovirtC.Client, config *ovirtconfigv1.OvirtMachi
 	if config.AutoPinningPolicy != "" {
 		supported, err := ovirtClient.SupportsFeature(ovirtC.FeatureAutoPinning)
 		if err != nil {
-			return errors.Wrap(err, "Failed to check autopinning support")
+			return errors.Wrap(err, "failed to check autopinning support")
 		}
 		if !supported {
-			return errors.Wrap(err, "Autopinning is not supported.")
+			return errors.Wrap(err, "autopinning is not supported.")
 		}
 	}
 	if err := validateHugepages(config.Hugepages); err != nil {

@@ -190,9 +190,9 @@ func (ms *machineScope) create() error {
 		if err != nil {
 			return errors.Wrapf(err, "Failed to list disk attachments for VM %s.", instance.ID())
 		}
-		for _, disk := range diskAttachments {
-			if disk.Bootable() {
-				bootableDiskAttachment = disk
+		for _, diskAttachment := range diskAttachments {
+			if diskAttachment.Bootable() {
+				bootableDiskAttachment = diskAttachment
 			}
 		}
 
@@ -255,11 +255,11 @@ func (ms *machineScope) create() error {
 	for _, agName := range ms.machineProviderSpec.AffinityGroupsNames {
 		ag, err := ms.ovirtClient.GetAffinityGroupByName(ovirtC.ClusterID(clusterId), agName, ovirtC.ContextStrategy(ms.Context))
 		if err != nil {
-			return errors.Wrapf(err, "failed to Find AffinityGroup %s.", agName)
+			return errors.Wrapf(err, "failed to find affinity group %s.", agName)
 		}
 		err = ag.AddVM(instance.ID())
 		if err != nil {
-			return errors.Wrapf(err, "failed to add VM %s to AffinityGroup %s.", instance.ID(), agName)
+			return errors.Wrapf(err, "failed to add VM %s to affinity group %s.", instance.ID(), agName)
 		}
 	}
 

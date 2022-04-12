@@ -13,6 +13,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog"
 	"math"
+	"net"
 	"regexp"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -431,6 +432,14 @@ func (ms *machineScope) findUsableInternalAddress(ctx context.Context, vmID stri
 
 	nicRegex := regexp.MustCompile(`^(eth|en|br\-ex).*`)
 	IPParams := ovirtC.NewVMIPSearchParams().WithIncludedInterfacePattern(nicRegex)
+	for excludedAdrr, _ := range excludeAddr {
+		_, ipnet, err := net.ParseCIDR(fmt.Sprintf("%s/32", excludedAdrr))
+		if err != nil {
+			return "", errors.Wrapf(err, "failed to convert IP Address %s to CIDR", excludedAdrr)
+		}
+		IPParams = IPParams.WithExcludedRange(*ipnet)
+	}
+
 	nics, err := ms.ovirtClient.GetVMIPAddresses(vmID, IPParams, ovirtC.ContextStrategy(ms.Context))
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to get reported devices list, reason: %w", err)
@@ -438,15 +447,10 @@ func (ms *machineScope) findUsableInternalAddress(ctx context.Context, vmID stri
 
 	for _, ipAddressSlice := range nics {
 		for _, ipAddress := range ipAddressSlice {
-			if _, ok := excludeAddr[ipAddress.String()]; ok {
-				klog.Infof("ipAddress %s is excluded from usable IPs", ipAddress)
-				continue
-			}
 			return ipAddress.String(), nil
 		}
 	}
 	return "", errors.Wrapf(err, "failed to find usable address for VM %s ", vmID)
-
 }
 
 func (ms *machineScope) reconcileMachineProviderStatus(status string, id *string) error {

@@ -32,7 +32,7 @@ type BaseController struct {
 	ovirtClient ovirtclient.Client
 }
 
-// getClient returns a a client to oVirt's API endpoint
+// GetoVirtClient returns a a client to oVirt's API endpoint
 func (b *BaseController) GetoVirtClient() (ovirtclient.Client, error) {
 	if b.ovirtClient == nil || b.ovirtClient.Test() != nil {
 		var err error
@@ -45,7 +45,7 @@ func (b *BaseController) GetoVirtClient() (ovirtclient.Client, error) {
 	return b.ovirtClient, nil
 }
 
-// NewClient returns a ovirt client  by using the given credentials
+// GetoVirtClient returns a ovirt client by using the credentials from the K8 secrets
 func GetoVirtClient(k8sClient client.Client) (ovirtclient.Client, error) {
 	creds, err := GetCredentialsSecret(k8sClient, utils.NAMESPACE, utils.OvirtCloudCredsSecretName)
 	if err != nil {

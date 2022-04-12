@@ -22,7 +22,7 @@ const (
 	userDataSecretKey           = "userData"
 	// GlobalInfrastuctureName default name for infrastructure object
 	globalInfrastuctureName = "cluster"
-	BytesInMB               = 1048576
+	bytesInMB               = 1048576
 )
 
 type machineScope struct {
@@ -88,11 +88,11 @@ func (ms *machineScope) create() error {
 		}
 
 		if ms.machineProviderSpec.MemoryMB > 0 {
-			optionalVMParams = optionalVMParams.MustWithMemory(int64(BytesInMB) * int64(ms.machineProviderSpec.MemoryMB))
+			optionalVMParams = optionalVMParams.MustWithMemory(int64(bytesInMB) * int64(ms.machineProviderSpec.MemoryMB))
 		}
 
 		if ms.machineProviderSpec.GuaranteedMemoryMB > 0 {
-			optionalMemoryPolicy := ovirtC.NewMemoryPolicyParameters().MustWithGuaranteed(int64(BytesInMB) * int64(ms.machineProviderSpec.GuaranteedMemoryMB))
+			optionalMemoryPolicy := ovirtC.NewMemoryPolicyParameters().MustWithGuaranteed(int64(bytesInMB) * int64(ms.machineProviderSpec.GuaranteedMemoryMB))
 			optionalVMParams = optionalVMParams.WithMemoryPolicy(optionalMemoryPolicy)
 		}
 	}
@@ -193,7 +193,7 @@ func (ms *machineScope) create() error {
 	if ms.machineProviderSpec.OSDisk != nil {
 		diskAttachments, err := instance.ListDiskAttachments()
 		if err != nil {
-			return errors.Wrapf(err, "Failed to list disk attachments for VM %s.", instance.ID())
+			return errors.Wrapf(err, "failed to list disk attachments for VM %s.", instance.ID())
 		}
 		for _, diskAttachment := range diskAttachments {
 			if diskAttachment.Bootable() {
@@ -206,15 +206,19 @@ func (ms *machineScope) create() error {
 		}
 
 		disk, err := ms.ovirtClient.GetDisk(bootableDiskAttachment.DiskID(), ovirtC.ContextStrategy(ms.Context))
+		if err != nil {
+			return err
+		}
+
 		if newDiskSize > disk.ProvisionedSize() {
 			updatedDisk, err := disk.Update(ovirtC.UpdateDiskParams().MustWithProvisionedSize(newDiskSize))
 			if err != nil {
-				return errors.Wrapf(err, "Failed to extend disk %s (%v)", disk.ID())
+				return errors.Wrapf(err, "failed to extend disk %s", disk.ID())
 			}
-			klog.Infof("Waiting for disk to become OK...")
+			klog.Infof("waiting for disk to become OK...")
 			updatedDisk, err = updatedDisk.WaitForOK()
 			if err != nil {
-				return errors.Wrapf(err, "Failed to wait for disk %s to return to OK status. (%v)", disk.ID())
+				return err
 			}
 		}
 	}
@@ -238,7 +242,7 @@ func (ms *machineScope) create() error {
 			_, err := instance.CreateNIC(fmt.Sprintf("nic%d", i+1), nic.VNICProfileID, ovirtC.CreateNICParams())
 
 			if err != nil {
-				return errors.Wrap(err, "failed to create network interface")
+				return err
 			}
 		}
 	}
@@ -246,23 +250,23 @@ func (ms *machineScope) create() error {
 	if isAutoPinning {
 		err = ms.ovirtClient.AutoOptimizeVMCPUPinningSettings(instance.ID(), true, ovirtC.ContextStrategy(ms.Context))
 		if err != nil {
-			return errors.Wrapf(err, "failed to Optimize CPU pinning settings for VM %s", instance.ID())
+			return err
 		}
 	}
 
 	err = ms.ovirtClient.AddTagToVMByName(instance.ID(), ms.machine.Labels["machine.openshift.io/cluster-api-cluster"], ovirtC.ContextStrategy(ms.Context))
 	if err != nil {
-		return errors.Wrap(err, "Failed to add tag to VM.")
+		return err
 	}
 
 	for _, agName := range ms.machineProviderSpec.AffinityGroupsNames {
 		ag, err := ms.ovirtClient.GetAffinityGroupByName(ovirtC.ClusterID(clusterId), agName, ovirtC.ContextStrategy(ms.Context))
 		if err != nil {
-			return errors.Wrapf(err, "failed to find affinity group %s.", agName)
+			return err
 		}
 		err = ag.AddVM(instance.ID())
 		if err != nil {
-			return errors.Wrapf(err, "failed to add VM %s to affinity group %s.", instance.ID(), agName)
+			return err
 		}
 	}
 
@@ -275,7 +279,7 @@ func (ms *machineScope) create() error {
 	// Wait till running
 	_, err = ms.ovirtClient.WaitForVMStatus(instance.ID(), ovirtC.VMStatusUp, ovirtC.ContextStrategy(ms.Context))
 	if err != nil {
-		return errors.Wrap(err, "Error waiting for oVirt VM to be UP")
+		return errors.Wrap(err, "error waiting for oVirt VM to be UP")
 	}
 	return nil
 }
@@ -444,7 +448,7 @@ func (ms *machineScope) findUsableInternalAddress(ctx context.Context, vmID stri
 
 	nics, err := ms.ovirtClient.GetVMIPAddresses(vmID, IPParams, ovirtC.ContextStrategy(ms.Context))
 	if err != nil {
-		return "", errors.Wrapf(err, "failed to get reported devices list, reason: %w", err)
+		return "", errors.Wrapf(err, "failed to get reported devices list")
 	}
 
 	for _, ipAddressSlice := range nics {

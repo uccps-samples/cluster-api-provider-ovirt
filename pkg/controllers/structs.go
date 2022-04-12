@@ -2,10 +2,6 @@ package ovirt
 
 import ovirtsdk "github.com/ovirt/go-ovirt"
 
-type ovirtClient struct {
-	connection *ovirtsdk.Connection
-}
-
 type Instance struct {
 	*ovirtsdk.Vm
 }

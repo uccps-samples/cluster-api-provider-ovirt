@@ -7,27 +7,18 @@ package machine
 
 import (
 	"context"
-	"fmt"
-	"time"
-
 	machinev1 "github.com/openshift/api/machine/v1beta1"
 	"github.com/openshift/client-go/machine/clientset/versioned/typed/machine/v1beta1"
 	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
-	ovirtC "github.com/openshift/cluster-api-provider-ovirt/pkg/clients/ovirt"
-	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
+	common "github.com/openshift/cluster-api-provider-ovirt/pkg/controllers"
 	apierrors "github.com/openshift/machine-api-operator/pkg/controller/machine"
-	ovirtsdk "github.com/ovirt/go-ovirt"
+	ovirtclient "github.com/ovirt/go-ovirt-client"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-)
-
-const (
-	timeoutInstanceCreate       = 5 * time.Minute
-	retryIntervalInstanceStatus = 10 * time.Second
 )
 
 // ActuatorParams is the data structure that contains the parameters required to set up a new Actuator.
@@ -41,21 +32,21 @@ type ActuatorParams struct {
 
 // OvirtActuator is responsible for performing machine reconciliation on oVirt platform.
 type OvirtActuator struct {
-	params          ActuatorParams
-	scheme          *runtime.Scheme
-	client          client.Client
-	eventRecorder   record.EventRecorder
-	ovirtConnection *ovirtsdk.Connection
+	params        ActuatorParams
+	scheme        *runtime.Scheme
+	client        client.Client
+	eventRecorder record.EventRecorder
+	ovirtClient   ovirtclient.Client
 }
 
 // NewActuator returns an Ovirt Actuator.
 func NewActuator(params ActuatorParams) *OvirtActuator {
 	return &OvirtActuator{
-		params:          params,
-		client:          params.Client,
-		scheme:          params.Scheme,
-		eventRecorder:   params.EventRecorder,
-		ovirtConnection: nil,
+		params:        params,
+		client:        params.Client,
+		scheme:        params.Scheme,
+		eventRecorder: params.EventRecorder,
+		ovirtClient:   nil,
 	}
 }
 
@@ -69,13 +60,11 @@ func (actuator *OvirtActuator) Create(ctx context.Context, machine *machinev1.Ma
 			"cannot unmarshal machineProviderSpec field: %v", err))
 	}
 
-	connection, err := actuator.getConnection()
+	ovirtClient, err := actuator.getClient()
 	if err != nil {
 		return actuator.handleMachineError(machine, "Create", apierrors.InvalidMachineConfiguration(
 			"failed to create connection to oVirt API: %v", err))
 	}
-
-	ovirtClient := ovirtC.NewOvirtClient(connection)
 
 	if err := validateMachine(ovirtClient, providerSpec); err != nil {
 		return actuator.handleMachineError(machine, "Create", apierrors.InvalidMachineConfiguration(
@@ -109,13 +98,12 @@ func (actuator *OvirtActuator) Update(ctx context.Context, machine *machinev1.Ma
 			"cannot unmarshal machineProviderSpec field: %v", err))
 	}
 
-	connection, err := actuator.getConnection()
+	ovirtClient, err := actuator.getClient()
 	if err != nil {
 		return actuator.handleMachineError(machine, "Update", apierrors.UpdateMachine(
 			"failed to create connection to oVirt API %v", err))
 	}
 
-	ovirtClient := ovirtC.NewOvirtClient(connection)
 	mScope := newMachineScope(ctx, ovirtClient, actuator.client, machine, providerSpec)
 
 	if err := mScope.reconcileMachine(ctx); err != nil {
@@ -136,23 +124,23 @@ func (actuator *OvirtActuator) Update(ctx context.Context, machine *machinev1.Ma
 // A machine which is not terminated is considered as existing.
 func (actuator *OvirtActuator) Exists(ctx context.Context, machine *machinev1.Machine) (bool, error) {
 	klog.Infof("Checking machine %v exists.\n", machine.Name)
-	connection, err := actuator.getConnection()
+	ovirtClient, err := actuator.getClient()
 	if err != nil {
 		return false, errors.Wrap(err, "failed to create connection to oVirt API")
 	}
-	ovirtClient := ovirtC.NewOvirtClient(connection)
 	mScope := newMachineScope(ctx, ovirtClient, actuator.client, machine, nil)
 
 	return mScope.exists()
 }
 
-// Update deletes the VM from the RHV environment
+// Delete deletes the VM from the RHV environment
 func (actuator *OvirtActuator) Delete(ctx context.Context, machine *machinev1.Machine) error {
-	connection, err := actuator.getConnection()
+	ovirtClient, err := actuator.getClient()
+
 	if err != nil {
 		return errors.Wrap(err, "failed to create connection to oVirt API")
 	}
-	ovirtClient := ovirtC.NewOvirtClient(connection)
+
 	mScope := newMachineScope(ctx, ovirtClient, actuator.client, machine, nil)
 	if err := mScope.delete(); err != nil {
 		return actuator.handleMachineError(machine, "Deleted", apierrors.UpdateMachine(
@@ -181,18 +169,15 @@ func (actuator *OvirtActuator) handleMachineError(machine *machinev1.Machine, re
 	return err
 }
 
-// getConnection returns a a client to oVirt's API endpoint
-func (actuator *OvirtActuator) getConnection() (*ovirtsdk.Connection, error) {
-	if actuator.ovirtConnection == nil || actuator.ovirtConnection.Test() != nil {
-		creds, err := ovirtC.GetCredentialsSecret(actuator.client, utils.NAMESPACE, utils.OvirtCloudCredsSecretName)
-		if err != nil {
-			return nil, fmt.Errorf("failed getting credentials for namespace %s, %w", utils.NAMESPACE, err)
-		}
+// getClient returns a a client to oVirt's API endpoint
+func (actuator *OvirtActuator) getClient() (ovirtclient.Client, error) {
+	if actuator.ovirtClient == nil || actuator.ovirtClient.Test() != nil {
+		var err error
 		// session expired or some other error, re-login.
-		actuator.ovirtConnection, err = ovirtC.CreateAPIConnection(creds)
+		actuator.ovirtClient, err = common.GetoVirtClient(actuator.client)
 		if err != nil {
 			return nil, errors.Wrap(err, "failed creating ovirt connection")
 		}
 	}
-	return actuator.ovirtConnection, nil
+	return actuator.ovirtClient, nil
 }

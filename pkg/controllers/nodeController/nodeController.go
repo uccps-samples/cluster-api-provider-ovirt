@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"strings"
 
-	ovirtClient "github.com/openshift/cluster-api-provider-ovirt/pkg/clients/ovirt"
 	common "github.com/openshift/cluster-api-provider-ovirt/pkg/controllers"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
-	ovirtsdk "github.com/ovirt/go-ovirt"
+	ovirtC "github.com/ovirt/go-ovirt-client"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -52,13 +51,13 @@ func (r *nodeController) Reconcile(ctx context.Context, request reconcile.Reques
 	if !strings.Contains(node.Spec.ProviderID, utils.ProviderIDPrefix) {
 		return common.ResultNoRequeue(), nil
 	}
-	c, err := r.GetConnection()
+	ovirtClient, err := r.GetoVirtClient()
 	if err != nil {
 		return common.ResultRequeueDefault(),
 			errors.Wrap(err, "error getting connection to oVirt, requeue")
 	}
-	ovirtC := ovirtClient.NewOvirtClient(c)
-	vm, err := ovirtC.GetVMByName(node.Name)
+
+	vm, err := ovirtClient.GetVMByName(node.Name)
 	if err != nil {
 		return common.ResultRequeueDefault(),
 			fmt.Errorf("failed getting VM %s from oVirt, requeue: %w", node.Name, err)
@@ -70,9 +69,9 @@ func (r *nodeController) Reconcile(ctx context.Context, request reconcile.Reques
 		if err := r.Client.Delete(ctx, &node); err != nil {
 			return common.ResultRequeueDefault(), fmt.Errorf("error deleting node: %v, error: %w", node.Name, err)
 		}
-	} else if vm.MustStatus() == ovirtsdk.VMSTATUS_DOWN {
+	} else if vm.Status() == ovirtC.VMStatusDown {
 		r.Log.Info("Node VM status is Down, requeuing for 1 min",
-			"Node", node.Name, "Vm Status", ovirtsdk.VMSTATUS_DOWN)
+			"Node", node.Name, "Vm Status", ovirtC.VMStatusDown)
 		return common.ResultRequeueAfter(retryIntervalVMDownSec), nil
 	}
 	return common.ResultNoRequeue(), nil

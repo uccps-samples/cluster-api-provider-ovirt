@@ -3,8 +3,6 @@ package providerIDcontroller
 import (
 	"context"
 	"fmt"
-
-	ovirtClient "github.com/openshift/cluster-api-provider-ovirt/pkg/clients/ovirt"
 	common "github.com/openshift/cluster-api-provider-ovirt/pkg/controllers"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
 	"github.com/pkg/errors"
@@ -68,11 +66,10 @@ func (r *providerIDController) Reconcile(ctx context.Context, request reconcile.
 
 // fetchOvirtVmID returns the id of the oVirt VM which correlates to the node
 func (r *providerIDController) fetchOvirtVmID(nodeName string) (string, error) {
-	c, err := r.GetConnection()
+	ovirtC, err := r.GetoVirtClient()
 	if err != nil {
 		return "", errors.Wrap(err, "error getting connection to oVirt")
 	}
-	ovirtC := ovirtClient.NewOvirtClient(c)
 
 	vm, err := ovirtC.GetVMByName(nodeName)
 	if err != nil {
@@ -82,7 +79,7 @@ func (r *providerIDController) fetchOvirtVmID(nodeName string) (string, error) {
 	if vm == nil {
 		return "", nil
 	}
-	return vm.MustId(), nil
+	return vm.ID(), nil
 }
 
 // Creates a new ProviderID Controller and adds it to the manager

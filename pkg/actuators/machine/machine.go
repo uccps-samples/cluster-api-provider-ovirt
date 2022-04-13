@@ -172,6 +172,11 @@ func (ms *machineScope) create() error {
 		}
 	}
 
+	if ms.machineProviderSpec.StorageDomainId != "" {
+		// Set StorageDomainID
+		// TODO: https://github.com/oVirt/go-ovirt-client/issues/178
+	}
+
 	instance, err := ms.ovirtClient.CreateVM(ovirtC.ClusterID(clusterId),
 		temp.ID(),
 		ms.machine.Name,

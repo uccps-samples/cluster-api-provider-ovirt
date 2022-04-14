@@ -60,8 +60,6 @@ github.com/gogo/protobuf/sortkeys
 # github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
 ## explicit
 github.com/golang/groupcache/lru
-# github.com/golang/mock v1.6.0
-## explicit; go 1.11
 # github.com/golang/protobuf v1.5.2
 ## explicit; go 1.9
 github.com/golang/protobuf/proto
@@ -183,7 +181,7 @@ github.com/openshift/machine-api-operator/pkg/util/conditions
 # github.com/ovirt/go-ovirt v0.0.0-20210809163552-d4276e35d3db
 ## explicit; go 1.15
 github.com/ovirt/go-ovirt
-# github.com/ovirt/go-ovirt-client v1.0.0-alpha1
+# github.com/ovirt/go-ovirt-client v1.0.0-alpha2
 ## explicit; go 1.16
 github.com/ovirt/go-ovirt-client
 # github.com/ovirt/go-ovirt-client-log-klog v1.0.0

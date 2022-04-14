@@ -173,8 +173,14 @@ func (ms *machineScope) create() error {
 	}
 
 	if ms.machineProviderSpec.StorageDomainId != "" {
-		// Set StorageDomainID
-		// TODO: https://github.com/oVirt/go-ovirt-client/issues/178
+		tempDiskAttachment, err := ms.ovirtClient.ListTemplateDiskAttachments(temp.ID(), ovirtC.ContextStrategy(ms.Context))
+		if err != nil {
+			return errors.Wrapf(err, "failed to fetch template %s disk attachments from oVirt Engine",
+				ms.machineProviderSpec.TemplateName)
+		}
+		optionalVMParams = optionalVMParams.MustWithDisks([]ovirtC.OptionalVMDiskParameters{
+			ovirtC.MustNewBuildableVMDiskParameters(tempDiskAttachment[0].DiskID()).MustWithStorageDomainID(ms.machineProviderSpec.StorageDomainId),
+		})
 	}
 
 	instance, err := ms.ovirtClient.CreateVM(ovirtC.ClusterID(clusterId),

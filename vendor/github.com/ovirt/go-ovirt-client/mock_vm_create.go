@@ -171,17 +171,7 @@ func (m *mockClient) attachVMDisksFromTemplate(tpl *template, vm *vm, params Opt
 		var sparse *bool
 		for _, diskParam := range params.Disks() {
 			if diskParam.DiskID() == disk.ID() {
-				sparse = diskParam.Sparse()
-				if format := diskParam.Format(); format != nil {
-					if *format != disk.Format() {
-						m.logger.Warningf(
-							"the VM creation client requested a conversion from from %s to %s; the mock library does not support this and the source image data will be used unmodified which may lead to errors",
-							disk.format,
-							format,
-						)
-						disk.format = *format
-					}
-				}
+				sparse = m.updateDiskParams(diskParam, disk, params)
 				break
 			}
 		}
@@ -209,17 +199,53 @@ func (m *mockClient) attachVMDisksFromTemplate(tpl *template, vm *vm, params Opt
 	}
 }
 
+func (m *mockClient) updateDiskParams(
+	diskParam OptionalVMDiskParameters,
+	disk *diskWithData,
+	params OptionalVMParameters,
+) *bool {
+	sparse := diskParam.Sparse()
+	if format := diskParam.Format(); format != nil {
+		if *format != disk.Format() {
+			m.logger.Warningf(
+				"the VM creation client requested a conversion from from %s to %s; the mock library does not support this and the source image data will be used unmodified which may lead to errors",
+				disk.format,
+				format,
+			)
+			disk.format = *format
+		}
+	}
+	if sd := diskParam.StorageDomainID(); sd != nil {
+		if params.Clone() != nil && *params.Clone() {
+			disk.storageDomainIDs = []string{*sd}
+		} else {
+			for _, diskSD := range disk.storageDomainIDs {
+				if diskSD == *sd {
+					disk.storageDomainIDs = []string{*sd}
+					break
+				}
+			}
+			// If the SD is not found then we leave the SD unchanged, just as the engine does.
+		}
+	}
+	return sparse
+}
+
 func (m *mockClient) createVMCPU(params OptionalVMParameters, tpl *template) *vmCPU {
 	var cpu *vmCPU
 	cpuParams := params.CPU()
 	switch {
 	case cpuParams != nil:
-		cpu = &vmCPU{
-			topo: &vmCPUTopo{
-				cores:   cpuParams.Cores(),
-				sockets: cpuParams.Sockets(),
-				threads: cpuParams.Threads(),
-			},
+		cpu = &vmCPU{}
+		if topo := cpuParams.Topo(); topo != nil {
+			cpu.topo = &vmCPUTopo{
+				cores:   topo.Cores(),
+				sockets: topo.Sockets(),
+				threads: topo.Threads(),
+			}
+		}
+		if mode := cpuParams.Mode(); mode != nil {
+			cpu.mode = mode
 		}
 	case tpl.cpu != nil:
 		cpu = tpl.cpu.clone()

@@ -111,6 +111,10 @@ type OvirtMachineProviderSpec struct {
 
 	// StorageDomainId defines the VM disk Storage Domain ID type and overrides the template Disk storage Domain ID.
 	// if StorageDomainId is different then template Storage ID the disk will be copied between Domains.
+	//
+	// Note: this option supported only work when Clone is set to true (default)
+	//
+	// +optional
 	StorageDomainId string `json:"storage_domain_id,omitempty"`
 }
 

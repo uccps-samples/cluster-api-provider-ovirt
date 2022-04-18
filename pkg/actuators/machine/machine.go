@@ -313,7 +313,17 @@ func (ms *machineScope) delete() error {
 		}
 		return errors.Wrap(err, "error finding VM by name")
 	}
-	return ms.ovirtClient.RemoveVM(vm.ID(), ovirtC.ContextStrategy(ms.Context))
+	if err := vm.Stop(true, ovirtC.ContextStrategy(ms.Context)); err != nil {
+		return err
+	}
+	if _, err := vm.WaitForStatus(ovirtC.VMStatusDown, ovirtC.ContextStrategy(ms.Context)); err != nil {
+		return err
+	}
+	if err := vm.Remove(ovirtC.ContextStrategy(ms.Context)); err != nil && !ovirtC.HasErrorCode(err, ovirtC.ENotFound) {
+		return err
+	}
+
+	return nil
 }
 
 // returns the ignition from the userData secret

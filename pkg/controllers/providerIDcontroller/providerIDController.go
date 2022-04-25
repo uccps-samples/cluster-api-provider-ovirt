@@ -5,6 +5,7 @@ import (
 	"fmt"
 	common "github.com/openshift/cluster-api-provider-ovirt/pkg/controllers"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
+	ovirtC "github.com/ovirt/go-ovirt-client"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -66,19 +67,20 @@ func (r *providerIDController) Reconcile(ctx context.Context, request reconcile.
 
 // fetchOvirtVmID returns the id of the oVirt VM which correlates to the node
 func (r *providerIDController) fetchOvirtVmID(nodeName string) (string, error) {
-	ovirtC, err := r.GetoVirtClient()
+	ovirtclient, err := r.GetoVirtClient()
 	if err != nil {
 		return "", errors.Wrap(err, "error getting connection to oVirt")
 	}
 
-	vm, err := ovirtC.GetVMByName(nodeName)
+	vm, err := ovirtclient.GetVMByName(nodeName)
 	if err != nil {
+		if ovirtC.HasErrorCode(err, ovirtC.ENotFound) {
+			return "", nil
+		}
 		r.Log.Error(err, "Error occurred will searching VM", "VM name", nodeName)
 		return "", fmt.Errorf("failed getting VM %s from oVirt: %w", nodeName, err)
 	}
-	if vm == nil {
-		return "", nil
-	}
+
 	return vm.ID(), nil
 }
 

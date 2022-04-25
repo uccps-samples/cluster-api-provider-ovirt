@@ -60,7 +60,9 @@ func (ms *machineScope) create() error {
 	clusterId := ms.machineProviderSpec.ClusterId
 
 	if err != nil {
-		return errors.Wrap(err, "error finding VM by name")
+		if !ovirtC.HasErrorCode(err, ovirtC.ENotFound) {
+			return errors.Wrap(err, "error finding VM by name")
+		}
 	}
 	if vms != nil {
 		klog.Infof("Skipped creating a VM that already exists.\n")
@@ -297,11 +299,14 @@ func (ms *machineScope) create() error {
 
 // exists returns true if machine exists.
 func (ms *machineScope) exists() (bool, error) {
-	vm, err := ms.ovirtClient.GetVMByName(ms.machine.Name, ovirtC.ContextStrategy(ms.Context))
+	_, err := ms.ovirtClient.GetVMByName(ms.machine.Name, ovirtC.ContextStrategy(ms.Context))
 	if err != nil {
+		if ovirtC.HasErrorCode(err, ovirtC.ENotFound) {
+			return false, nil
+		}
 		return false, errors.Wrap(err, "error finding VM by name")
 	}
-	return vm != nil, nil
+	return true, nil
 }
 
 // delete deletes the VM which corresponds with the machine object from the oVirt engine
@@ -313,7 +318,17 @@ func (ms *machineScope) delete() error {
 		}
 		return errors.Wrap(err, "error finding VM by name")
 	}
-	return ms.ovirtClient.RemoveVM(vm.ID(), ovirtC.ContextStrategy(ms.Context))
+	if err := vm.Stop(true, ovirtC.ContextStrategy(ms.Context)); err != nil {
+		return err
+	}
+	if _, err := vm.WaitForStatus(ovirtC.VMStatusDown, ovirtC.ContextStrategy(ms.Context)); err != nil {
+		return err
+	}
+	if err := vm.Remove(ovirtC.ContextStrategy(ms.Context)); err != nil && !ovirtC.HasErrorCode(err, ovirtC.ENotFound) {
+		return err
+	}
+
+	return nil
 }
 
 // returns the ignition from the userData secret

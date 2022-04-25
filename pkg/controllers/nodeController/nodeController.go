@@ -59,16 +59,16 @@ func (r *nodeController) Reconcile(ctx context.Context, request reconcile.Reques
 
 	vm, err := ovirtClient.GetVMByName(node.Name)
 	if err != nil {
+		if ovirtC.HasErrorCode(err, ovirtC.ENotFound) {
+			r.Log.Info(
+				"Deleting Node from cluster since it has been removed from the oVirt engine",
+				"Node", node.Name)
+			if err := r.Client.Delete(ctx, &node); err != nil {
+				return common.ResultRequeueDefault(), fmt.Errorf("error deleting node: %v, error: %w", node.Name, err)
+			}
+		}
 		return common.ResultRequeueDefault(),
 			fmt.Errorf("failed getting VM %s from oVirt, requeue: %w", node.Name, err)
-	} else if vm == nil {
-		// Node doesn't exist in oVirt platform, deleting node object
-		r.Log.Info(
-			"Deleting Node from cluster since it has been removed from the oVirt engine",
-			"Node", node.Name)
-		if err := r.Client.Delete(ctx, &node); err != nil {
-			return common.ResultRequeueDefault(), fmt.Errorf("error deleting node: %v, error: %w", node.Name, err)
-		}
 	} else if vm.Status() == ovirtC.VMStatusDown {
 		r.Log.Info("Node VM status is Down, requeuing for 1 min",
 			"Node", node.Name, "Vm Status", ovirtC.VMStatusDown)

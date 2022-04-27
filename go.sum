@@ -547,8 +547,12 @@ github.com/opentracing/opentracing-go v1.1.0/go.mod h1:UkNAQd3GIcIGf0SeVgPpRdFSt
 github.com/operator-framework/operator-sdk v0.5.1-0.20190301204940-c2efe6f74e7b/go.mod h1:iVyukRkam5JZa8AnjYf+/G3rk7JI1+M6GsU0sq0B9NA=
 github.com/ovirt/go-ovirt v0.0.0-20210809163552-d4276e35d3db h1:ahvAlEurj4TF1SExDJHNeqknQC8lAwnZEPLyZJuRyd0=
 github.com/ovirt/go-ovirt v0.0.0-20210809163552-d4276e35d3db/go.mod h1:Zkdj9/rW6eyuw0uOeEns6O3pP5G2ak+bI/tgkQ/tEZI=
+github.com/ovirt/go-ovirt v0.0.0-20220427092237-114c47f2835c h1:jXRFpl7+W0YZj/fghoYuE4vJWW/KeQGvdrhnRwRGtAY=
+github.com/ovirt/go-ovirt v0.0.0-20220427092237-114c47f2835c/go.mod h1:Zkdj9/rW6eyuw0uOeEns6O3pP5G2ak+bI/tgkQ/tEZI=
 github.com/ovirt/go-ovirt-client v1.0.0-alpha3 h1:JPBDjApMN7EZFnVBdUasTCdiDS7/lGzSvF+AN0ZF56I=
 github.com/ovirt/go-ovirt-client v1.0.0-alpha3/go.mod h1:OkR+/CC42lprXXzml/nTDPYzWTiYePvuaN2Kb2xeLr0=
+github.com/ovirt/go-ovirt-client v1.0.0-alpha4 h1:xI+fBHq6RhSR8WuEbljnTZwREchjbuJzgXSKZgpcRdI=
+github.com/ovirt/go-ovirt-client v1.0.0-alpha4/go.mod h1:Ckyo4Px2sVCW7oVZXSxFLW/Astje+y1aHjKIh7+8fow=
 github.com/ovirt/go-ovirt-client-log-klog v1.0.0 h1:xXG2M9FQifMATM5tlzyIA7qdQtcQ8P1kBoTdTt4iJGY=
 github.com/ovirt/go-ovirt-client-log-klog v1.0.0/go.mod h1:lWAyf9bu9+AkS+PKr0J2auzCsxLixDuTeYHhvLtpcLY=
 github.com/ovirt/go-ovirt-client-log/v2 v2.1.0/go.mod h1:mDoU3KIwftpsgZGzXGk5d2UEJYTY0bYMfg/GwPapXL0=

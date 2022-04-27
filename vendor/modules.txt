@@ -178,10 +178,10 @@ github.com/openshift/machine-api-operator/pkg/controller/machine
 github.com/openshift/machine-api-operator/pkg/metrics
 github.com/openshift/machine-api-operator/pkg/util
 github.com/openshift/machine-api-operator/pkg/util/conditions
-# github.com/ovirt/go-ovirt v0.0.0-20210809163552-d4276e35d3db
+# github.com/ovirt/go-ovirt v0.0.0-20220427092237-114c47f2835c
 ## explicit; go 1.15
 github.com/ovirt/go-ovirt
-# github.com/ovirt/go-ovirt-client v1.0.0-alpha3
+# github.com/ovirt/go-ovirt-client v1.0.0-alpha4
 ## explicit; go 1.16
 github.com/ovirt/go-ovirt-client
 # github.com/ovirt/go-ovirt-client-log-klog v1.0.0

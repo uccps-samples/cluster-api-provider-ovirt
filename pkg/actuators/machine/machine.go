@@ -3,6 +3,10 @@ package machine
 import (
 	"context"
 	"fmt"
+	"math"
+	"net"
+	"regexp"
+
 	configv1 "github.com/openshift/api/config/v1"
 	machinev1 "github.com/openshift/api/machine/v1beta1"
 	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
@@ -11,9 +15,6 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog"
-	"math"
-	"net"
-	"regexp"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -165,7 +166,7 @@ func (ms *machineScope) create() error {
 
 	// Handle Disk Clone
 	if ms.machineProviderSpec.Clone != nil {
-		optionalVMParams = optionalVMParams.MustWithClone(true)
+		optionalVMParams = optionalVMParams.MustWithClone(*ms.machineProviderSpec.Clone)
 	} else {
 		if ms.machineProviderSpec.VMType == string(ovirtC.VMTypeDesktop) {
 			optionalVMParams = optionalVMParams.MustWithClone(false)

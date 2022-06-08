@@ -3,13 +3,14 @@ package providerIDcontroller
 import (
 	"context"
 	"fmt"
+
 	common "github.com/openshift/cluster-api-provider-ovirt/pkg/controllers"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
 	ovirtC "github.com/ovirt/go-ovirt-client"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/klog/klogr"
+	"k8s.io/klog/v2/klogr"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"

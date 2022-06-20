@@ -2,11 +2,12 @@ package ovirtclient
 
 import "fmt"
 
+// nolint:dupl
 func (o *oVirtClient) ListAffinityGroups(
 	clusterID ClusterID,
 	retries ...RetryStrategy,
 ) (result []AffinityGroup, err error) {
-	retries = defaultRetries(retries, defaultReadTimeouts())
+	retries = defaultRetries(retries, defaultReadTimeouts(o))
 	result = []AffinityGroup{}
 	err = retry(
 		fmt.Sprintf("listing affinity groups in cluster %s", clusterID),

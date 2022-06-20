@@ -6,11 +6,11 @@ import (
 
 func (o *oVirtClient) RemoveVMFromAffinityGroup(
 	clusterID ClusterID,
-	vmID string,
+	vmID VMID,
 	agID AffinityGroupID,
 	retries ...RetryStrategy,
 ) error {
-	retries = defaultRetries(retries, defaultWriteTimeouts())
+	retries = defaultRetries(retries, defaultWriteTimeouts(o))
 	return retry(
 		fmt.Sprintf("adding VM %s to affinity group %s", vmID, agID),
 		o.logger,
@@ -23,7 +23,7 @@ func (o *oVirtClient) RemoveVMFromAffinityGroup(
 				AffinityGroupsService().
 				GroupService(string(agID)).
 				VmsService().
-				VmService(vmID).
+				VmService(string(vmID)).
 				Remove().
 				Send()
 			return err
@@ -33,7 +33,7 @@ func (o *oVirtClient) RemoveVMFromAffinityGroup(
 
 func (m *mockClient) RemoveVMFromAffinityGroup(
 	clusterID ClusterID,
-	vmID string,
+	vmID VMID,
 	agID AffinityGroupID,
 	_ ...RetryStrategy,
 ) error {

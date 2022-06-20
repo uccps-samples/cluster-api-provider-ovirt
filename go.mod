@@ -7,8 +7,8 @@ require (
 	github.com/openshift/api v0.0.0-20220531073726-6c4f186339a7
 	github.com/openshift/client-go v0.0.0-20220603133046-984ee5ebedcf
 	github.com/openshift/machine-api-operator v0.2.1-0.20220601192856-d7fb6b5b87ef
-	github.com/ovirt/go-ovirt-client v1.0.0-alpha4
-	github.com/ovirt/go-ovirt-client-log-klog v1.0.0
+	github.com/ovirt/go-ovirt-client v1.0.0
+	github.com/ovirt/go-ovirt-client-log-klog/v2 v2.0.0
 	github.com/pkg/errors v0.9.1
 	k8s.io/api v0.24.1
 	k8s.io/apimachinery v0.24.1
@@ -69,7 +69,7 @@ require (
 	github.com/onsi/gomega v1.18.1 // indirect
 	github.com/openshift/library-go v0.0.0-20220525173854-9b950a41acdc // indirect
 	github.com/ovirt/go-ovirt v0.0.0-20220427092237-114c47f2835c // indirect
-	github.com/ovirt/go-ovirt-client-log/v2 v2.2.0 // indirect
+	github.com/ovirt/go-ovirt-client-log/v3 v3.0.0 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_golang v1.12.1 // indirect

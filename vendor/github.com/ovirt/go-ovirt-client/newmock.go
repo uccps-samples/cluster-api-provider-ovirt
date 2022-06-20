@@ -77,47 +77,49 @@ func getClient(
 	testDatacenter *datacenterWithClusters,
 ) *mockClient {
 	client := &mockClient{
+		ctx:             nil,
 		logger:          logger,
 		url:             "https://localhost/ovirt-engine/api",
 		lock:            &sync.Mutex{},
-		vms:             map[string]*vm{},
-		tags:            map[string]*tag{},
+		vms:             map[VMID]*vm{},
+		tags:            map[TagID]*tag{},
 		nonSecureRandom: rand.New(rand.NewSource(time.Now().UnixNano())), //nolint:gosec
-		storageDomains: map[string]*storageDomain{
+		storageDomains: map[StorageDomainID]*storageDomain{
 			testStorageDomain.ID():      testStorageDomain,
 			secondaryStorageDomain.ID(): secondaryStorageDomain,
 		},
-		disks: map[string]*diskWithData{},
+		disks: map[DiskID]*diskWithData{},
 		clusters: map[ClusterID]*cluster{
 			testCluster.ID(): testCluster,
 		},
-		hosts: map[string]*host{
+		hosts: map[HostID]*host{
 			testHost.ID(): testHost,
 		},
 		templates: map[TemplateID]*template{
 			blankTemplate.ID(): blankTemplate,
 		},
-		nics: map[string]*nic{},
-		vnicProfiles: map[string]*vnicProfile{
+		nics: map[NICID]*nic{},
+		vnicProfiles: map[VNICProfileID]*vnicProfile{
 			testVNICProfile.ID(): testVNICProfile,
 		},
-		networks: map[string]*network{
+		networks: map[NetworkID]*network{
 			testNetwork.ID(): testNetwork,
 		},
-		dataCenters: map[string]*datacenterWithClusters{
+		dataCenters: map[DatacenterID]*datacenterWithClusters{
 			testDatacenter.ID(): testDatacenter,
 		},
-		vmDiskAttachmentsByVM:   map[string]map[string]*diskAttachment{},
-		vmDiskAttachmentsByDisk: map[string]*diskAttachment{},
+		vmDiskAttachmentsByVM:   map[VMID]map[DiskAttachmentID]*diskAttachment{},
+		vmDiskAttachmentsByDisk: map[DiskID]*diskAttachment{},
 		templateDiskAttachmentsByTemplate: map[TemplateID][]*templateDiskAttachment{
 			blankTemplate.ID(): {},
 		},
-		templateDiskAttachmentsByDisk: map[string]*templateDiskAttachment{},
+		templateDiskAttachmentsByDisk: map[DiskID]*templateDiskAttachment{},
 		affinityGroups: map[ClusterID]map[AffinityGroupID]*affinityGroup{
 			testCluster.ID(): {},
 		},
-		vmIPs:         map[string]map[string][]net.IP{},
-		instanceTypes: nil,
+		vmIPs:                map[VMID]map[string][]net.IP{},
+		instanceTypes:        nil,
+		graphicsConsolesByVM: map[VMID][]*vmGraphicsConsole{},
 	}
 	client.instanceTypes = getInstanceTypes(client)
 	return client
@@ -156,7 +158,7 @@ func getInstanceTypes(client *mockClient) map[InstanceTypeID]*instanceType {
 
 func generateTestVNICProfile(testNetwork *network) *vnicProfile {
 	return &vnicProfile{
-		id:        uuid.NewString(),
+		id:        VNICProfileID(uuid.NewString()),
 		name:      "test",
 		networkID: testNetwork.ID(),
 	}
@@ -164,7 +166,7 @@ func generateTestVNICProfile(testNetwork *network) *vnicProfile {
 
 func generateTestNetwork(testDatacenter *datacenterWithClusters) *network {
 	return &network{
-		id:   uuid.NewString(),
+		id:   NetworkID(uuid.NewString()),
 		name: "test",
 		dcID: testDatacenter.ID(),
 	}
@@ -173,7 +175,7 @@ func generateTestNetwork(testDatacenter *datacenterWithClusters) *network {
 func generateTestDatacenter(testCluster *cluster) *datacenterWithClusters {
 	return &datacenterWithClusters{
 		datacenter: datacenter{
-			id:   uuid.NewString(),
+			id:   DatacenterID(uuid.NewString()),
 			name: "test",
 		},
 		clusters: []ClusterID{
@@ -184,7 +186,7 @@ func generateTestDatacenter(testCluster *cluster) *datacenterWithClusters {
 
 func generateTestStorageDomain() *storageDomain {
 	return &storageDomain{
-		id:             uuid.NewString(),
+		id:             StorageDomainID(uuid.NewString()),
 		name:           "Test storage domain",
 		available:      10 * 1024 * 1024 * 1024,
 		status:         StorageDomainStatusActive,
@@ -201,7 +203,7 @@ func generateTestCluster() *cluster {
 
 func generateTestHost(c *cluster) *host {
 	return &host{
-		id:        uuid.NewString(),
+		id:        HostID(uuid.NewString()),
 		clusterID: c.ID(),
 		status:    HostStatusUp,
 	}

@@ -71,6 +71,9 @@ const EUnsupported ErrorCode = "unsupported"
 // EDiskLocked indicates that the disk in question is locked.
 const EDiskLocked ErrorCode = "disk_locked"
 
+// EVMLocked indicates that the virtual machine in question is locked.
+const EVMLocked ErrorCode = "vm_locked"
+
 // ERelatedOperationInProgress means that the engine is busy working on something else on the same resource.
 const ERelatedOperationInProgress ErrorCode = "related_operation_in_progress"
 
@@ -83,6 +86,24 @@ const EConflict ErrorCode = "conflict"
 
 // EHotPlugFailed indicates that a disk could not be hot plugged.
 const EHotPlugFailed ErrorCode = "hot_plug_failed"
+
+// EInvalidGrant is an error returned from the oVirt Engine when the SSO token expired. In this case we must reconnect
+// and retry the API call.
+const EInvalidGrant ErrorCode = "invalid_grant"
+
+// ECannotRunVM indicates an error with the VM configuration which prevents it from being run.
+const ECannotRunVM ErrorCode = "cannot_run_vm"
+
+// CanRecover returns true if there is a way to automatically recoverFailure from this error. For the actual recovery an
+// appropriate recovery strategy must be passed to the retry function.
+func (e ErrorCode) CanRecover() bool {
+	switch e {
+	case EInvalidGrant:
+		return true
+	default:
+		return false
+	}
+}
 
 // CanAutoRetry returns false if the given error code is permanent and an automatic retry should not be attempted.
 func (e ErrorCode) CanAutoRetry() bool {
@@ -108,6 +129,8 @@ func (e ErrorCode) CanAutoRetry() bool {
 	case EPermanentHTTPError:
 		return false
 	case EUnexpectedDiskStatus:
+		return false
+	case ECannotRunVM:
 		return false
 	default:
 		return true
@@ -139,6 +162,9 @@ type EngineError interface {
 	Code() ErrorCode
 	// Unwrap returns the underlying error
 	Unwrap() error
+	// CanRecover indicates that this error can be automatically recovered with the use of the proper recovery strategy
+	// passed to the retry function.
+	CanRecover() bool
 	// CanAutoRetry returns false if an automatic retry should not be attempted.
 	CanAutoRetry() bool
 }
@@ -192,6 +218,10 @@ func (e *engineError) Unwrap() error {
 	return e.cause
 }
 
+func (e *engineError) CanRecover() bool {
+	return e.code.CanRecover()
+}
+
 func (e *engineError) CanAutoRetry() bool {
 	return e.code.CanAutoRetry()
 }
@@ -235,6 +265,12 @@ func realIdentify(err error) EngineError {
 	var authErr *ovirtsdk.AuthError
 	var notFoundErr *ovirtsdk.NotFoundError
 	switch {
+	case strings.Contains(err.Error(), "Cannot run VM without at least one bootable disk."):
+		return wrap(
+			err,
+			ECannotRunVM,
+			"cannot run VM due to a missing bootable disk",
+		)
 	case strings.Contains(err.Error(), "Physical Memory Guaranteed cannot exceed Memory Size"):
 		return wrap(
 			err,
@@ -259,6 +295,8 @@ func realIdentify(err error) EngineError {
 			ENotAnOVirtEngine,
 			"the server gave a HTTP response to a HTTPS client, check if your URL is correct",
 		)
+	case strings.Contains(err.Error(), "invalid_grant: The provided authorization grant for the auth code has expired."):
+		return wrap(err, EInvalidGrant, "please reauthenticate for a new access token")
 	case strings.Contains(err.Error(), "tls"):
 		fallthrough
 	case strings.Contains(err.Error(), "x509"):
@@ -267,6 +305,8 @@ func realIdentify(err error) EngineError {
 		return wrap(err, ENotFound, "the requested resource was not found")
 	case strings.Contains(err.Error(), "Disk is locked"):
 		return wrap(err, EDiskLocked, "the disk is locked")
+	case strings.Contains(err.Error(), "VM is locked"):
+		return wrap(err, EVMLocked, "the VM is locked")
 	case strings.Contains(err.Error(), "Failed to hot-plug disk"):
 		return wrap(err, EHotPlugFailed, "failed to hot-plug disk")
 	case strings.Contains(err.Error(), "Related operation is currently in progress."):

@@ -82,7 +82,7 @@ func (r *providerIDController) fetchOvirtVmID(nodeName string) (string, error) {
 		return "", fmt.Errorf("failed getting VM %s from oVirt: %w", nodeName, err)
 	}
 
-	return vm.ID(), nil
+	return string(vm.ID()), nil
 }
 
 // Creates a new ProviderID Controller and adds it to the manager

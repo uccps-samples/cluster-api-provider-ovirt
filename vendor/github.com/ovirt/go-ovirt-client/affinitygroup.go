@@ -26,8 +26,8 @@ type AffinityGroupClient interface {
 	// RemoveAffinityGroup removes the affinity group specified.
 	RemoveAffinityGroup(clusterID ClusterID, id AffinityGroupID, retries ...RetryStrategy) error
 
-	AddVMToAffinityGroup(clusterID ClusterID, vmID string, agID AffinityGroupID, retries ...RetryStrategy) error
-	RemoveVMFromAffinityGroup(clusterID ClusterID, vmID string, agID AffinityGroupID, retries ...RetryStrategy) error
+	AddVMToAffinityGroup(clusterID ClusterID, vmID VMID, agID AffinityGroupID, retries ...RetryStrategy) error
+	RemoveVMFromAffinityGroup(clusterID ClusterID, vmID VMID, agID AffinityGroupID, retries ...RetryStrategy) error
 }
 
 // CreateAffinityGroupOptionalParams is a list of optional parameters that can be passed for affinity group creation.
@@ -41,6 +41,8 @@ type CreateAffinityGroupOptionalParams interface {
 	VMsRule() AffinityVMsRule
 	// Enforcing returns if the affinity group should be enforced.
 	Enforcing() *bool
+	// Description returns the description for the affinity group.
+	Description() string
 }
 
 // BuildableCreateAffinityGroupOptionalParams is a buildable version of CreateAffinityGroupOptionalParams.
@@ -55,17 +57,35 @@ type BuildableCreateAffinityGroupOptionalParams interface {
 	WithHostsRule(rule AffinityHostsRule) (BuildableCreateAffinityGroupOptionalParams, error)
 	MustWithHostsRule(rule AffinityHostsRule) BuildableCreateAffinityGroupOptionalParams
 
-	WithHostsRuleParameters(enabled bool, affinity Affinity, enforcing bool) (BuildableCreateAffinityGroupOptionalParams, error)
-	MustWithHostsRuleParameters(enabled bool, affinity Affinity, enforcing bool) BuildableCreateAffinityGroupOptionalParams
+	WithHostsRuleParameters(
+		enabled bool,
+		affinity Affinity,
+		enforcing bool,
+	) (BuildableCreateAffinityGroupOptionalParams, error)
+	MustWithHostsRuleParameters(
+		enabled bool,
+		affinity Affinity,
+		enforcing bool,
+	) BuildableCreateAffinityGroupOptionalParams
 
 	WithVMsRule(rule AffinityVMsRule) (BuildableCreateAffinityGroupOptionalParams, error)
 	MustWithVMsRule(rule AffinityVMsRule) BuildableCreateAffinityGroupOptionalParams
 
-	WithVMsRuleParameters(enabled bool, affinity Affinity, enforcing bool) (BuildableCreateAffinityGroupOptionalParams, error)
-	MustWithVMsRuleParameters(enabled bool, affinity Affinity, enforcing bool) BuildableCreateAffinityGroupOptionalParams
+	WithVMsRuleParameters(enabled bool, affinity Affinity, enforcing bool) (
+		BuildableCreateAffinityGroupOptionalParams,
+		error,
+	)
+	MustWithVMsRuleParameters(
+		enabled bool,
+		affinity Affinity,
+		enforcing bool,
+	) BuildableCreateAffinityGroupOptionalParams
 
 	WithEnforcing(enforcing bool) (BuildableCreateAffinityGroupOptionalParams, error)
 	MustWithEnforcing(enforcing bool) BuildableCreateAffinityGroupOptionalParams
+
+	WithDescription(description string) (BuildableCreateAffinityGroupOptionalParams, error)
+	MustWithDescription(description string) BuildableCreateAffinityGroupOptionalParams
 }
 
 // CreateAffinityGroupParams creates a buildable set of parameters for creating an affinity group.
@@ -98,6 +118,8 @@ type AffinityGroupData interface {
 	ID() AffinityGroupID
 	// Name is the user-readable oVirt name of the affinity group.
 	Name() string
+	// Description returns the description of the affinity group.
+	Description() string
 	// ClusterID is the identifier of the cluster this affinity group belongs to.
 	ClusterID() ClusterID
 	// Priority indicates in which order the affinity groups should be evaluated.
@@ -109,7 +131,7 @@ type AffinityGroupData interface {
 	// VMsRule contains the rule for the virtual machines.
 	VMsRule() AffinityVMsRule
 	// VMIDs returns the list of current virtual machine IDs assigned to this affinity group.
-	VMIDs() []string
+	VMIDs() []VMID
 }
 
 // AffinityGroup labels virtual machines, so they run / don't run on the same host.
@@ -122,9 +144,9 @@ type AffinityGroup interface {
 	Remove(retries ...RetryStrategy) error
 
 	// AddVM adds the specified VM to the current affinity group.
-	AddVM(id string, retries ...RetryStrategy) error
+	AddVM(id VMID, retries ...RetryStrategy) error
 	// RemoveVM removes the specified VM from the current affinity group.
-	RemoveVM(id string, retries ...RetryStrategy) error
+	RemoveVM(id VMID, retries ...RetryStrategy) error
 }
 
 // AffinityRule is a rule for either hosts or virtual machines.
@@ -164,18 +186,23 @@ func (a affinityRule) Enforcing() bool {
 type affinityGroup struct {
 	client Client
 
-	id        AffinityGroupID
-	name      string
-	clusterID ClusterID
-	priority  AffinityGroupPriority
-	enforcing bool
+	id          AffinityGroupID
+	name        string
+	description string
+	clusterID   ClusterID
+	priority    AffinityGroupPriority
+	enforcing   bool
 
 	hostsRule AffinityRule
 	vmsRule   AffinityRule
-	vmids     []string
+	vmids     []VMID
 }
 
-func (a affinityGroup) hasVM(id string) bool {
+func (a affinityGroup) Description() string {
+	return a.description
+}
+
+func (a affinityGroup) hasVM(id VMID) bool {
 	for _, vmid := range a.vmids {
 		if vmid == id {
 			return true
@@ -184,11 +211,11 @@ func (a affinityGroup) hasVM(id string) bool {
 	return false
 }
 
-func (a affinityGroup) AddVM(id string, retries ...RetryStrategy) error {
+func (a affinityGroup) AddVM(id VMID, retries ...RetryStrategy) error {
 	return a.client.AddVMToAffinityGroup(a.clusterID, id, a.id, retries...)
 }
 
-func (a affinityGroup) RemoveVM(id string, retries ...RetryStrategy) error {
+func (a affinityGroup) RemoveVM(id VMID, retries ...RetryStrategy) error {
 	return a.client.RemoveVMFromAffinityGroup(a.clusterID, id, a.id, retries...)
 }
 
@@ -228,7 +255,7 @@ func (a affinityGroup) Enforcing() bool {
 	return a.enforcing
 }
 
-func (a affinityGroup) VMIDs() []string {
+func (a affinityGroup) VMIDs() []VMID {
 	return a.vmids
 }
 
@@ -243,6 +270,15 @@ func convertSDKAffinityGroupName(sdkObject *ovirtsdk.AffinityGroup, result *affi
 		return newFieldNotFound("affinity group", "name")
 	}
 	result.name = name
+	return nil
+}
+
+func convertSDKAffinityGroupDescription(sdkObject *ovirtsdk.AffinityGroup, result *affinityGroup) error {
+	description, ok := sdkObject.Description()
+	if !ok {
+		return newFieldNotFound("affinity group", "description")
+	}
+	result.description = description
 	return nil
 }
 
@@ -308,13 +344,13 @@ func convertSDKAffinityGroupVMsList(sdkObject *ovirtsdk.AffinityGroup, result *a
 	if !ok {
 		return newFieldNotFound("affinity group", "VMs list")
 	}
-	convertedVMIDs := make([]string, len(vmsList.Slice()))
+	convertedVMIDs := make([]VMID, len(vmsList.Slice()))
 	for i, vm := range vmsList.Slice() {
 		vmid, ok := vm.Id()
 		if !ok {
 			return newFieldNotFound("VM on affinity group", "id")
 		}
-		convertedVMIDs[i] = vmid
+		convertedVMIDs[i] = VMID(vmid)
 	}
 	result.vmids = convertedVMIDs
 	return nil
@@ -327,6 +363,7 @@ func convertSDKAffinityGroup(sdkObject *ovirtsdk.AffinityGroup, o *oVirtClient) 
 	converters := []func(sdkObject *ovirtsdk.AffinityGroup, result *affinityGroup) error{
 		convertSDKAffinityGroupID,
 		convertSDKAffinityGroupName,
+		convertSDKAffinityGroupDescription,
 		convertSDKAffinityGroupCluster,
 		convertSDKAffinityGroupEnforcing,
 		convertSDKAffinityGroupPriority,
@@ -363,10 +400,31 @@ func convertSDKAffinityRule(sdk *ovirtsdk.AffinityRule) (*affinityRule, error) {
 }
 
 type createAffinityGroupParams struct {
-	priority  *AffinityGroupPriority
-	hostsRule AffinityHostsRule
-	vmsRule   AffinityVMsRule
-	enforcing *bool
+	priority    *AffinityGroupPriority
+	hostsRule   AffinityHostsRule
+	vmsRule     AffinityVMsRule
+	enforcing   *bool
+	description string
+}
+
+func (c *createAffinityGroupParams) Description() string {
+	return c.description
+}
+
+func (c *createAffinityGroupParams) WithDescription(description string) (
+	BuildableCreateAffinityGroupOptionalParams,
+	error,
+) {
+	c.description = description
+	return c, nil
+}
+
+func (c *createAffinityGroupParams) MustWithDescription(description string) BuildableCreateAffinityGroupOptionalParams {
+	builder, err := c.WithDescription(description)
+	if err != nil {
+		panic(err)
+	}
+	return builder
 }
 
 func (c *createAffinityGroupParams) Enforcing() *bool {

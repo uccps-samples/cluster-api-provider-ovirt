@@ -6,7 +6,7 @@ import (
 
 func (o *oVirtClient) GetVMByName(name string, retries ...RetryStrategy) (result VM, err error) {
 
-	retries = defaultRetries(retries, defaultReadTimeouts())
+	retries = defaultRetries(retries, defaultReadTimeouts(o))
 	err = retry(
 		fmt.Sprintf("getting vm name %s", name),
 		o.logger,
@@ -20,7 +20,7 @@ func (o *oVirtClient) GetVMByName(name string, retries ...RetryStrategy) (result
 				if mName, ok := sdkObject.Name(); ok {
 					// We re-scan for the name here since the search function may result other VMs too.
 					if name == mName {
-						result, err = convertSDKVM(sdkObject, o)
+						result, err = convertSDKVM(sdkObject, o, o.logger, "getting VM by name")
 						return err
 					}
 				}

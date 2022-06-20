@@ -111,7 +111,7 @@ func (ms *machineScope) create() error {
 				return errors.Wrap(err, "error Listing hosts")
 			}
 
-			hostIDs := make([]string, 0)
+			hostIDs := make([]ovirtC.HostID, 0)
 			for _, host := range hosts {
 				if string(host.ClusterID()) == clusterId {
 					hostIDs = append(hostIDs, host.ID())
@@ -182,7 +182,7 @@ func (ms *machineScope) create() error {
 				ms.machineProviderSpec.TemplateName)
 		}
 		optionalVMParams = optionalVMParams.MustWithDisks([]ovirtC.OptionalVMDiskParameters{
-			ovirtC.MustNewBuildableVMDiskParameters(tempDiskAttachment[0].DiskID()).MustWithStorageDomainID(ms.machineProviderSpec.StorageDomainId),
+			ovirtC.MustNewBuildableVMDiskParameters(tempDiskAttachment[0].DiskID()).MustWithStorageDomainID(ovirtC.StorageDomainID(ms.machineProviderSpec.StorageDomainId)),
 		})
 	}
 
@@ -253,7 +253,7 @@ func (ms *machineScope) create() error {
 
 		//re-create NICs According to the machinespec
 		for i, nic := range ms.machineProviderSpec.NetworkInterfaces {
-			_, err := instance.CreateNIC(fmt.Sprintf("nic%d", i+1), nic.VNICProfileID, ovirtC.CreateNICParams())
+			_, err := instance.CreateNIC(fmt.Sprintf("nic%d", i+1), ovirtC.VNICProfileID(nic.VNICProfileID), ovirtC.CreateNICParams())
 
 			if err != nil {
 				return err
@@ -365,13 +365,13 @@ func (ms *machineScope) reconcileMachine(ctx context.Context) error {
 	id := instance.ID()
 	status := instance.Status()
 	name := instance.Name()
-	ms.reconcileMachineProviderID(id)
-	ms.reconcileMachineAnnotations(string(status), id)
-	err = ms.reconcileMachineNetwork(ctx, status, name, id)
+	ms.reconcileMachineProviderID(string(id))
+	ms.reconcileMachineAnnotations(string(status), string(id))
+	err = ms.reconcileMachineNetwork(ctx, status, name, string(id))
 	if err != nil {
 		return errors.Wrap(err, "error reconciling machine network")
 	}
-	err = ms.reconcileMachineProviderStatus(string(status), &id)
+	err = ms.reconcileMachineProviderStatus(string(status), (*string)(&id))
 	if err != nil {
 		return errors.Wrap(err, "error reconciling machine provider status")
 	}
@@ -473,7 +473,7 @@ func (ms *machineScope) findUsableInternalAddress(ctx context.Context, vmID stri
 		IPParams = IPParams.WithExcludedRange(*ipnet)
 	}
 
-	nics, err := ms.ovirtClient.GetVMIPAddresses(vmID, IPParams, ovirtC.ContextStrategy(ms.Context))
+	nics, err := ms.ovirtClient.GetVMIPAddresses(ovirtC.VMID(vmID), IPParams, ovirtC.ContextStrategy(ms.Context))
 	if err != nil {
 		return "", errors.Wrapf(err, "failed to get reported devices list")
 	}

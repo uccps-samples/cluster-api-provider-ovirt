@@ -15,7 +15,7 @@ func (o *oVirtClient) CreateAffinityGroup(
 	if params == nil {
 		params = CreateAffinityGroupParams()
 	}
-	retries = defaultRetries(retries, defaultWriteTimeouts())
+	retries = defaultRetries(retries, defaultWriteTimeouts(o))
 	err = retry(
 		fmt.Sprintf("creating affinity group in cluster %s", clusterID),
 		o.logger,
@@ -25,6 +25,9 @@ func (o *oVirtClient) CreateAffinityGroup(
 				Name(name)
 			if enforcing := params.Enforcing(); enforcing != nil {
 				agBuilder.Enforcing(*enforcing)
+			}
+			if description := params.Description(); description != "" {
+				agBuilder.Description(description)
 			}
 			if vmsRule := params.VMsRule(); vmsRule != nil {
 				rule := ovirtsdk4.NewAffinityRuleBuilder()
@@ -91,14 +94,15 @@ func (m *mockClient) CreateAffinityGroup(
 		vmsRule = &affinityRule{}
 	}
 	ag := &affinityGroup{
-		client:    m,
-		id:        AffinityGroupID(m.GenerateUUID()),
-		name:      name,
-		clusterID: clusterID,
-		priority:  priority,
-		enforcing: enforcing,
-		hostsRule: hostsRule,
-		vmsRule:   vmsRule,
+		client:      m,
+		id:          AffinityGroupID(m.GenerateUUID()),
+		name:        name,
+		description: params.Description(),
+		clusterID:   clusterID,
+		priority:    priority,
+		enforcing:   enforcing,
+		hostsRule:   hostsRule,
+		vmsRule:     vmsRule,
 	}
 
 	m.lock.Lock()

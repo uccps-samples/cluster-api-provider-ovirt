@@ -192,6 +192,10 @@ func (ms *machineScope) create() error {
 		cpuMode = cpuMode.MustWithMode(ovirtC.CPUModeHostPassthrough)
 		optionalVMParams = optionalVMParams.MustWithCPU(cpuMode)
 
+		memPolicy := ovirtC.NewMemoryPolicyParameters()
+		memPolicy = memPolicy.MustWithBallooning(false)
+		optionalVMParams = optionalVMParams.WithMemoryPolicy(memPolicy)
+
 	}
 
 	optionalPlacementPolicy = optionalPlacementPolicy.MustWithAffinity(vmAffinity)

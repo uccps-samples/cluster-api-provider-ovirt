@@ -144,6 +144,12 @@ func TestActuator(t *testing.T) {
 				if *createdVM.CPU().Mode() != ovirtclient.CPUModeHostPassthrough {
 					t.Errorf("Expected CPU mode to be Host Pass-Through for high performance VM")
 				}
+
+				// check memory ballooning
+				if createdVM.MemoryPolicy().Ballooning() {
+					t.Errorf("Expected memory ballooning to be disabled for high performance VM")
+
+				}
 			},
 		},
 	}

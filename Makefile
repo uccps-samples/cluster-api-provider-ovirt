@@ -40,15 +40,15 @@ build:
 		-o bin/machine-controller-manager \
 		cmd/manager/main.go
 
-test: unit functional
-
 check: depend fmt vet lint
 
-unit: depend
-	go test -tags=unit $(shell go list ./...) $(TESTARGS)
+test: unit-test functional-test
 
-functional:
-	@echo "$@ not yet implemented"
+unit-test: depend
+	go test -tags=unit ./... $(TESTARGS)
+
+functional-test:
+	go test -tags=functional ./... $(TESTARGS)
 
 fmt:
 	hack/verify-gofmt.sh

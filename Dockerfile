@@ -26,8 +26,7 @@ LABEL   com.redhat.component="machine-api" \
 WORKDIR /go/cluster-api-provider-ovirt
 COPY . .
 
-
-RUN git --version 
+RUN make test
 RUN make build
 
 FROM registry.ci.openshift.org/openshift/origin-v4.0:base

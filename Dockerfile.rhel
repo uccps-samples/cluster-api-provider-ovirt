@@ -27,7 +27,7 @@ WORKDIR /go/cluster-api-provider-ovirt
 COPY . .
 
 
-RUN git --version
+RUN make test
 RUN make build
 
 FROM registry.ci.openshift.org/ocp/4.12:base

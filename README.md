@@ -10,12 +10,26 @@ using openshift/cluster-api-provider api, which implements the machine actuator.
 Fast development cycle is to build the binarties, `manager` and `machine-controller-manager` \
 and run those against a running cluster kubeconfig.
 
-## build
+## Build
+
 ```
 make build
 ```
 
-## run the components locally
+## Testing
+
+Build tags are used to distinguish between different test scopes: 
+```go
+//go:build unit
+//go:build functional
+```
+
+Run all available tests via
+```bash 
+make test
+```
+
+## Run the components locally
 
 ```console
 $ export KUBECONFIG=path/to/kubecofig

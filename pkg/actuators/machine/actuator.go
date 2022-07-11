@@ -7,12 +7,12 @@ package machine
 
 import (
 	"context"
+
 	machinev1 "github.com/openshift/api/machine/v1beta1"
 	"github.com/openshift/client-go/machine/clientset/versioned/typed/machine/v1beta1"
 	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
 	common "github.com/openshift/cluster-api-provider-ovirt/pkg/controllers"
 	apierrors "github.com/openshift/machine-api-operator/pkg/controller/machine"
-	ovirtclient "github.com/ovirt/go-ovirt-client"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -23,30 +23,31 @@ import (
 
 // ActuatorParams is the data structure that contains the parameters required to set up a new Actuator.
 type ActuatorParams struct {
-	Namespace      string
-	Client         client.Client
-	Scheme         *runtime.Scheme
-	MachinesClient v1beta1.MachineV1beta1Interface
-	EventRecorder  record.EventRecorder
+	Namespace          string
+	Client             client.Client
+	Scheme             *runtime.Scheme
+	MachinesClient     v1beta1.MachineV1beta1Interface
+	EventRecorder      record.EventRecorder
+	OVirtClientFactory common.OVirtClientFactory
 }
 
 // OvirtActuator is responsible for performing machine reconciliation on oVirt platform.
 type OvirtActuator struct {
-	params        ActuatorParams
-	scheme        *runtime.Scheme
-	client        client.Client
-	eventRecorder record.EventRecorder
-	ovirtClient   ovirtclient.Client
+	params             ActuatorParams
+	scheme             *runtime.Scheme
+	client             client.Client
+	eventRecorder      record.EventRecorder
+	ovirtClientFactory common.OVirtClientFactory
 }
 
 // NewActuator returns an Ovirt Actuator.
 func NewActuator(params ActuatorParams) *OvirtActuator {
 	return &OvirtActuator{
-		params:        params,
-		client:        params.Client,
-		scheme:        params.Scheme,
-		eventRecorder: params.EventRecorder,
-		ovirtClient:   nil,
+		params:             params,
+		client:             params.Client,
+		scheme:             params.Scheme,
+		eventRecorder:      params.EventRecorder,
+		ovirtClientFactory: params.OVirtClientFactory,
 	}
 }
 
@@ -60,7 +61,7 @@ func (actuator *OvirtActuator) Create(ctx context.Context, machine *machinev1.Ma
 			"cannot unmarshal machineProviderSpec field: %v", err))
 	}
 
-	ovirtClient, err := actuator.getClient()
+	ovirtClient, err := actuator.ovirtClientFactory.GetOVirtClient()
 	if err != nil {
 		return actuator.handleMachineError(machine, "Create", apierrors.InvalidMachineConfiguration(
 			"failed to create connection to oVirt API: %v", err))
@@ -98,7 +99,7 @@ func (actuator *OvirtActuator) Update(ctx context.Context, machine *machinev1.Ma
 			"cannot unmarshal machineProviderSpec field: %v", err))
 	}
 
-	ovirtClient, err := actuator.getClient()
+	ovirtClient, err := actuator.ovirtClientFactory.GetOVirtClient()
 	if err != nil {
 		return actuator.handleMachineError(machine, "Update", apierrors.UpdateMachine(
 			"failed to create connection to oVirt API %v", err))
@@ -124,7 +125,7 @@ func (actuator *OvirtActuator) Update(ctx context.Context, machine *machinev1.Ma
 // A machine which is not terminated is considered as existing.
 func (actuator *OvirtActuator) Exists(ctx context.Context, machine *machinev1.Machine) (bool, error) {
 	klog.Infof("Checking machine %v exists.\n", machine.Name)
-	ovirtClient, err := actuator.getClient()
+	ovirtClient, err := actuator.ovirtClientFactory.GetOVirtClient()
 	if err != nil {
 		return false, errors.Wrap(err, "failed to create connection to oVirt API")
 	}
@@ -135,7 +136,7 @@ func (actuator *OvirtActuator) Exists(ctx context.Context, machine *machinev1.Ma
 
 // Delete deletes the VM from the RHV environment
 func (actuator *OvirtActuator) Delete(ctx context.Context, machine *machinev1.Machine) error {
-	ovirtClient, err := actuator.getClient()
+	ovirtClient, err := actuator.ovirtClientFactory.GetOVirtClient()
 
 	if err != nil {
 		return errors.Wrap(err, "failed to create connection to oVirt API")
@@ -167,17 +168,4 @@ func (actuator *OvirtActuator) handleMachineError(machine *machinev1.Machine, re
 
 	klog.Errorf("machine %s error: %v", machine.Name, err.Message)
 	return err
-}
-
-// getClient returns a a client to oVirt's API endpoint
-func (actuator *OvirtActuator) getClient() (ovirtclient.Client, error) {
-	if actuator.ovirtClient == nil || actuator.ovirtClient.Test() != nil {
-		var err error
-		// session expired or some other error, re-login.
-		actuator.ovirtClient, err = common.GetoVirtClient(actuator.client)
-		if err != nil {
-			return nil, errors.Wrap(err, "failed creating ovirt connection")
-		}
-	}
-	return actuator.ovirtClient, nil
 }

@@ -10,6 +10,22 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+FROM registry.ci.openshift.org/ocp/builder:rhel-8-golang-1.18-openshift-4.12
+
+RUN echo "Running Unit Tests..."
+WORKDIR /go/cluster-api-provider-ovirt
+COPY . .
+
+# unit testing
+RUN make test-unit
+
+# functional testing
+RUN sh ./hack/fetch-envtest-tools.sh
+RUN mv ./hack/kubebuilder /usr/local/
+RUN export PATH=$PATH:/usr/local/kubebuilder/bin
+RUN make test-functional
+
+
 FROM registry.ci.openshift.org/ocp/builder:rhel-8-golang-1.18-openshift-4.12 AS builder
 
 ARG version
@@ -26,9 +42,8 @@ LABEL   com.redhat.component="machine-api" \
 WORKDIR /go/cluster-api-provider-ovirt
 COPY . .
 
-
-RUN make test
 RUN make build
+
 
 FROM registry.ci.openshift.org/ocp/4.12:base
 

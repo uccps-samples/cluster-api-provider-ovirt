@@ -26,6 +26,7 @@ import (
 	machinev1 "github.com/openshift/api/machine/v1beta1"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/actuators/machine"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/apis"
+	ovirt "github.com/openshift/cluster-api-provider-ovirt/pkg/controllers"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/controllers/nodeController"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/controllers/providerIDcontroller"
 	capimachine "github.com/openshift/machine-api-operator/pkg/controller/machine"
@@ -131,10 +132,11 @@ func main() {
 	}
 
 	machineActuator := machine.NewActuator(machine.ActuatorParams{
-		Namespace:     *watchNamespace,
-		Client:        mgr.GetClient(),
-		Scheme:        mgr.GetScheme(),
-		EventRecorder: mgr.GetEventRecorderFor("ovirtprovider"),
+		Namespace:          *watchNamespace,
+		Client:             mgr.GetClient(),
+		Scheme:             mgr.GetScheme(),
+		EventRecorder:      mgr.GetEventRecorderFor("ovirtprovider"),
+		OVirtClientFactory: ovirt.NewOvirtClientFactory(mgr.GetClient()),
 	})
 
 	capimachine.AddWithActuator(mgr, machineActuator)

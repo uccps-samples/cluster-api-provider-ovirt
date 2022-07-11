@@ -457,7 +457,6 @@ func (ms *machineScope) getClusterAddress(ctx context.Context) (map[string]int, 
 	var clusterAddr = make(map[string]int)
 	clusterAddr[infra.Status.PlatformStatus.Ovirt.APIServerInternalIP] = 1
 	clusterAddr[infra.Status.PlatformStatus.Ovirt.IngressIP] = 1
-
 	return clusterAddr, nil
 }
 

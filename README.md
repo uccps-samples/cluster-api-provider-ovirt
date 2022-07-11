@@ -12,21 +12,52 @@ and run those against a running cluster kubeconfig.
 
 ## Build
 
-```
-make build
+The following make targets are provided:
+```bash
+# build the binary
+make build  
+
+# build the image
+make images
 ```
 
 ## Testing
 
-Build tags are used to distinguish between different test scopes: 
-```go
-//go:build unit
-//go:build functional
+Run all tests together via 
+```
+make test
 ```
 
-Run all available tests via
-```bash 
-make test
+### Unit Testing
+
+Unit tests are marked with the build tag
+```go
+//go:build unit
+```
+and can be run via  
+```bash
+make test-unit
+```
+
+
+### Functional Testing
+
+Functional (or integration) tests for the `cluster-api-provider-ovirt` are based on [envtest] instead of a real cluser. For more information, refer to [The Cluster API Book](https://cluster-api.sigs.k8s.io/developer/testing.html#integration-tests) on integration tests. 
+
+The necessary tooling can be fetched and installed via
+```bash
+./hack/fetch-envtest-tools.sh
+mv ./hack/kubebuilder /usr/local/
+export PATH=$PATH:/usr/local/kubebuilder/bin
+```
+
+Functional (or integration) tests are marked with the build tag
+```go
+//go:build functional
+```
+and can be run via 
+```bash
+make test-functional
 ```
 
 ## Run the components locally

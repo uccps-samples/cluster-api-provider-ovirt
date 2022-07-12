@@ -117,4 +117,3 @@ spec:
       - name: kubeadm
         hostPath:
           path: /usr/bin/kubeadm
-

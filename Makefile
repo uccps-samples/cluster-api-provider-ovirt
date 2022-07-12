@@ -42,12 +42,12 @@ build:
 
 check: depend fmt vet lint
 
-test: unit-test functional-test
+test: test-unit test-functional
 
-unit-test: depend
+test-unit: depend
 	go test -tags=unit ./... $(TESTARGS)
 
-functional-test:
+test-functional:
 	go test -tags=functional ./... $(TESTARGS)
 
 fmt:

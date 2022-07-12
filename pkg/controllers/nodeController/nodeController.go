@@ -100,6 +100,8 @@ func NewNodeController(mgr manager.Manager) *nodeController {
 		BaseController: common.BaseController{
 			Log:    log.Log.WithName("controllers").WithName(controllerName),
 			Client: mgr.GetClient(),
+
+			OVirtClientFactory: common.NewOvirtClientFactory(mgr.GetClient()),
 		},
 	}
 }

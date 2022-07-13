@@ -104,8 +104,11 @@ shell:
 	$(SHELL) -i
 
 # Generate code
-generate:
+generate: generate-crds
 	go generate ./pkg/... ./cmd/...
+
+generate-crds: vendor
+	go run vendor/sigs.k8s.io/controller-tools/cmd/controller-gen/main.go crd paths=./pkg/apis/ovirtprovider/v1beta1 output:crd:dir=./config/crd
 
 DOCKERFILE=Dockerfile
 images:

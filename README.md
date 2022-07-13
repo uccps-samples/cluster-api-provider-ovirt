@@ -21,6 +21,15 @@ make build
 make images
 ```
 
+### Code Generation
+
+On any changes in the [specification](https://github.com/openshift/cluster-api-provider-ovirt/blob/master/pkg/apis/ovirtprovider/v1beta1/types.go), run 
+```bash
+make generate
+```
+to automatically generate the new [CustomResourceDefinition](https://kubernetes.io/docs/tasks/extend-kubernetes/custom-resources/custom-resource-definitions/)s for oVirt.
+
+
 ## Testing
 
 Run all tests together via 

@@ -10,21 +10,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-FROM registry.ci.openshift.org/openshift/release:golang-1.18
-
-WORKDIR /go/cluster-api-provider-ovirt
-COPY . .
-
-# unit testing
-RUN make test-unit
-
-# functional testing
-RUN sh ./hack/fetch-envtest-tools.sh
-RUN mv ./hack/kubebuilder /usr/local/
-RUN export PATH=$PATH:/usr/local/kubebuilder/bin
-RUN make test-functional
-
-
 FROM registry.ci.openshift.org/openshift/release:golang-1.18 AS builder
 
 ARG version 
@@ -41,6 +26,7 @@ LABEL   com.redhat.component="machine-api" \
 WORKDIR /go/cluster-api-provider-ovirt
 COPY . .
 
+RUN git --version
 RUN make build
 
 

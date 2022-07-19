@@ -46,9 +46,7 @@ Functional (or integration) tests for the `cluster-api-provider-ovirt` are based
 
 The necessary tooling can be fetched and installed via
 ```bash
-./hack/fetch-envtest-tools.sh
-mv ./hack/kubebuilder /usr/local/
-export PATH=$PATH:/usr/local/kubebuilder/bin
+sh ./hack/envtest-tools.sh && fetch_tools && setup_env
 ```
 
 Functional (or integration) tests are marked with the build tag

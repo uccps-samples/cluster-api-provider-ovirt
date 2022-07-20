@@ -22,3 +22,10 @@ function setup_env {
     mv ./hack/kubebuilder /usr/local/
     export PATH=$PATH:/usr/local/kubebuilder/bin
 }
+
+function setup_env_ci {
+    mv ./hack/kubebuilder /tmp/
+    ls -la /tmp/kubebuilder/bin
+    export PATH=$PATH:/tmp/kubebuilder/bin
+    export KUBEBUILDER_ASSETS=/tmp/kubebuilder/bin
+}

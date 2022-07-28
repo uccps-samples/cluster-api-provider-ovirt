@@ -7,9 +7,9 @@ require (
 	github.com/openshift/api v0.0.0-20220531073726-6c4f186339a7
 	github.com/openshift/client-go v0.0.0-20220603133046-984ee5ebedcf
 	github.com/openshift/machine-api-operator v0.2.1-0.20220601192856-d7fb6b5b87ef
-	github.com/ovirt/go-ovirt-client v1.0.1
 	github.com/ovirt/go-ovirt-client-log-klog/v2 v2.0.0
 	github.com/ovirt/go-ovirt-client-log/v3 v3.0.0
+	github.com/ovirt/go-ovirt-client/v2 v2.0.0-alpha03
 	github.com/pkg/errors v0.9.1
 	k8s.io/api v0.24.1
 	k8s.io/apimachinery v0.24.1

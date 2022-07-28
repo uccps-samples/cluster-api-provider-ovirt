@@ -6,8 +6,8 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
-	ovirtclient "github.com/ovirt/go-ovirt-client"
 	kloglogger "github.com/ovirt/go-ovirt-client-log-klog/v2"
+	ovirtclient "github.com/ovirt/go-ovirt-client/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )

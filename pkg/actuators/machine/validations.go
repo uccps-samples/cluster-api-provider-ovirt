@@ -4,7 +4,7 @@ import (
 	"fmt"
 
 	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
-	ovirtC "github.com/ovirt/go-ovirt-client"
+	ovirtC "github.com/ovirt/go-ovirt-client/v2"
 	"github.com/pkg/errors"
 )
 

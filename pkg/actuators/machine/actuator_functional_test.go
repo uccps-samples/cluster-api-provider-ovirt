@@ -9,8 +9,8 @@ import (
 	"time"
 
 	machinev1 "github.com/openshift/api/machine/v1beta1"
-	ovirtclient "github.com/ovirt/go-ovirt-client"
 	ovirtclientlog "github.com/ovirt/go-ovirt-client-log/v3"
+	ovirtclient "github.com/ovirt/go-ovirt-client/v2"
 	k8sCorev1 "k8s.io/api/core/v1"
 	k8sMetav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"

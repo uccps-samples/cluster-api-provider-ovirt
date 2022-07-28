@@ -9,8 +9,8 @@ import (
 	"time"
 
 	machinev1 "github.com/openshift/api/machine/v1beta1"
-	ovirtclient "github.com/ovirt/go-ovirt-client"
 	ovirtclientlog "github.com/ovirt/go-ovirt-client-log/v3"
+	ovirtclient "github.com/ovirt/go-ovirt-client/v2"
 	k8sCorev1 "k8s.io/api/core/v1"
 	k8sMetav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -41,18 +41,13 @@ func TestActuator(t *testing.T) {
 	k8sComponentCleanup := setupK8sComponents(t, k8sClient, namespace)
 	defer k8sComponentCleanup()
 
-	helper, err := ovirtclient.NewMockTestHelper(ovirtclientlog.NewTestLogger(t))
-	if err != nil {
-		t.Fatalf("Unexpected error occurred setting up test helper: %v", err)
-	}
-
 	ctx := context.Background()
 	testcases := []struct {
 		name string
 
 		setup   func(ovirtSpec *capoV1Beta1.OvirtMachineProviderSpec, templateVMParams ovirtclient.BuildableVMParameters)
 		execute func(actuator *actuator.OvirtActuator, machine *machinev1.Machine)
-		verify  func()
+		verify  func(inputSpec *machinev1.Machine, createdVM ovirtclient.VM, helper ovirtclient.TestHelper)
 	}{
 		{
 			name: "create VM should succeed",
@@ -64,40 +59,52 @@ func TestActuator(t *testing.T) {
 					t.Fatalf("Unexpected error occurred while calling actuator create: %v", err)
 				}
 			},
-			verify: func() {
-				vm, err := helper.GetClient().GetVMByName("vm-12345")
-				if err != nil {
-					t.Fatalf("Unexpected error occurred while fetching VM: %v", err)
+			verify: func(inputSpec *machinev1.Machine, createdVM ovirtclient.VM, helper ovirtclient.TestHelper) {
+				if createdVM.Status() != ovirtclient.VMStatusDown {
+					t.Errorf("Expected vm status to be %s, but got %s", ovirtclient.VMStatusDown, createdVM.Status())
 				}
-
-				if vm.Status() != ovirtclient.VMStatusDown {
-					t.Errorf("Expected vm status to be %s, but got %s", ovirtclient.VMStatusDown, vm.Status())
-				}
-				if vm.ClusterID() != helper.GetClusterID() {
-					t.Errorf("Expected clusterID to be %s, but got %s", helper.GetClusterID(), vm.ClusterID())
+				if createdVM.ClusterID() != helper.GetClusterID() {
+					t.Errorf("Expected clusterID to be %s, but got %s", helper.GetClusterID(), createdVM.ClusterID())
 				}
 				expectedMemory := int64(16348 * 1024 * 1024)
-				if vm.Memory() != expectedMemory {
-					t.Errorf("Expected memory to be %d, but got %d", expectedMemory, vm.Memory())
+				if createdVM.Memory() != expectedMemory {
+					t.Errorf("Expected memory to be %d, but got %d", expectedMemory, createdVM.Memory())
 				}
-				if vm.VMType() != ovirtclient.VMTypeServer {
-					t.Errorf("Expected vm type to be %s, but got %s", ovirtclient.VMTypeServer, vm.VMType())
+				if createdVM.VMType() != ovirtclient.VMTypeServer {
+					t.Errorf("Expected vm type to be %s, but got %s", ovirtclient.VMTypeServer, createdVM.VMType())
 				}
-				if vm.HugePages() != nil {
-					t.Errorf("Expected hugepages to be <nil>, but got %v", vm.HugePages())
+				if createdVM.HugePages() != nil {
+					t.Errorf("Expected hugepages to be <nil>, but got %v", createdVM.HugePages())
 				}
-				if vm.CPU().Topo().Cores() != 4 {
-					t.Errorf("Expected cpu cores to be %d, but got %d", 4, vm.CPU().Topo().Cores())
+				if createdVM.CPU().Topo().Cores() != 4 {
+					t.Errorf("Expected cpu cores to be %d, but got %d", 4, createdVM.CPU().Topo().Cores())
 				}
-				if vm.CPU().Topo().Threads() != 1 {
-					t.Errorf("Expected cpu threads to be %d, but got %d", 1, vm.CPU().Topo().Threads())
+				if createdVM.CPU().Topo().Threads() != 1 {
+					t.Errorf("Expected cpu threads to be %d, but got %d", 1, createdVM.CPU().Topo().Threads())
 				}
-				if vm.CPU().Topo().Sockets() != 1 {
-					t.Errorf("Expected cpu sockets to be %d, but got %d", 1, vm.CPU().Topo().Sockets())
+				if createdVM.CPU().Topo().Sockets() != 1 {
+					t.Errorf("Expected cpu sockets to be %d, but got %d", 1, createdVM.CPU().Topo().Sockets())
 				}
 				expectedGuaranteedMemory := int64(10000 * 1024 * 1024)
-				if vm.MemoryPolicy().Guaranteed() == nil || *vm.MemoryPolicy().Guaranteed() != expectedGuaranteedMemory {
-					t.Errorf("Expected guaranteed memory to be %d, but got %v", expectedGuaranteedMemory, vm.MemoryPolicy().Guaranteed())
+				if createdVM.MemoryPolicy().Guaranteed() == nil || *createdVM.MemoryPolicy().Guaranteed() != expectedGuaranteedMemory {
+					t.Errorf("Expected guaranteed memory to be %d, but got %v", expectedGuaranteedMemory, createdVM.MemoryPolicy().Guaranteed())
+				}
+			},
+		},
+		{
+			name: "create high_performance VM",
+			setup: func(ovirtSpec *capoV1Beta1.OvirtMachineProviderSpec, templateVMParams ovirtclient.BuildableVMParameters) {
+				ovirtSpec.VMType = "high_performance"
+			},
+			execute: func(actuator *actuator.OvirtActuator, machine *machinev1.Machine) {
+				err := actuator.Create(ctx, machine)
+				if err != nil {
+					t.Fatalf("Unexpected error occurred while calling actuator create: %v", err)
+				}
+			},
+			verify: func(inputSpec *machinev1.Machine, createdVM ovirtclient.VM, helper ovirtclient.TestHelper) {
+				if createdVM.SoundcardEnabled() {
+					t.Errorf("Expected soundcard to be disabled for high performance VM")
 				}
 			},
 		},
@@ -105,12 +112,17 @@ func TestActuator(t *testing.T) {
 
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
+			helper, err := ovirtclient.NewMockTestHelper(ovirtclientlog.NewTestLogger(t))
+			if err != nil {
+				t.Fatalf("Unexpected error occurred setting up test helper: %v", err)
+			}
+
 			templateName := "ovirt14-vhd9b-rhcos"
 			ovirtSpec := basicOVirtSpec(templateName, string(helper.GetClusterID()))
-			tempateVMCreateParams := ovirtclient.NewCreateVMParams()
-			testcase.setup(ovirtSpec, tempateVMCreateParams)
+			templateVMCreateParams := ovirtclient.NewCreateVMParams()
+			testcase.setup(ovirtSpec, templateVMCreateParams)
 
-			setupVMTemplate(t, helper, templateName, tempateVMCreateParams)
+			setupVMTemplate(t, helper, templateName, templateVMCreateParams)
 			ovirtSpecRaw, err := capoV1Beta1.RawExtensionFromProviderSpec(ovirtSpec)
 			if err != nil {
 				t.Fatalf("Unexpected error occurred while parsing oVirtSpec: %v", err)
@@ -143,7 +155,13 @@ func TestActuator(t *testing.T) {
 			})
 
 			testcase.execute(newActuator, machine)
-			testcase.verify()
+
+			createdVM, err := helper.GetClient().GetVMByName(machine.ObjectMeta.Name)
+			if err != nil {
+				t.Fatalf("Unexpected error occurred while fetching VM: %v", err)
+			}
+			testcase.verify(machine, createdVM, helper)
+
 		})
 	}
 }
@@ -249,6 +267,18 @@ func basicMachineWithoutSpec(namespace string) *machinev1.Machine {
 	}
 }
 
+func waitForMachine(ctx context.Context, k8sClient client.Client, machine *machinev1.Machine) bool {
+	for i := 0; i < 10; i++ {
+		machineKey := types.NamespacedName{Namespace: machine.Namespace, Name: machine.Name}
+		err := k8sClient.Get(ctx, machineKey, &machinev1.Machine{})
+		if err == nil {
+			return true
+		}
+		time.Sleep(1 * time.Second)
+	}
+	return false
+}
+
 func basicOVirtSpec(templateName string, clusterID string) *capoV1Beta1.OvirtMachineProviderSpec {
 	return &capoV1Beta1.OvirtMachineProviderSpec{
 		ClusterId:    clusterID,
@@ -270,16 +300,4 @@ func basicOVirtSpec(templateName string, clusterID string) *capoV1Beta1.OvirtMac
 		Hugepages:          0,
 		GuaranteedMemoryMB: 10000,
 	}
-}
-
-func waitForMachine(ctx context.Context, k8sClient client.Client, machine *machinev1.Machine) bool {
-	for i := 0; i < 10; i++ {
-		machineKey := types.NamespacedName{Namespace: machine.Namespace, Name: machine.Name}
-		err := k8sClient.Get(ctx, machineKey, &machinev1.Machine{})
-		if err == nil {
-			return true
-		}
-		time.Sleep(1 * time.Second)
-	}
-	return false
 }

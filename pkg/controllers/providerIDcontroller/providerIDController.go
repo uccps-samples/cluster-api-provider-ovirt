@@ -6,7 +6,7 @@ import (
 
 	common "github.com/openshift/cluster-api-provider-ovirt/pkg/controllers"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
-	ovirtC "github.com/ovirt/go-ovirt-client"
+	ovirtC "github.com/ovirt/go-ovirt-client/v2"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"

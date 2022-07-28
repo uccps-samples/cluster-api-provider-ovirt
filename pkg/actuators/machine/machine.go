@@ -11,7 +11,7 @@ import (
 	machinev1 "github.com/openshift/api/machine/v1beta1"
 	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
-	ovirtC "github.com/ovirt/go-ovirt-client"
+	ovirtC "github.com/ovirt/go-ovirt-client/v2"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/klog"
@@ -184,6 +184,11 @@ func (ms *machineScope) create() error {
 		optionalVMParams = optionalVMParams.MustWithDisks([]ovirtC.OptionalVMDiskParameters{
 			ovirtC.MustNewBuildableVMDiskParameters(tempDiskAttachment[0].DiskID()).MustWithStorageDomainID(ovirtC.StorageDomainID(ms.machineProviderSpec.StorageDomainId)),
 		})
+	}
+
+	// see: https://access.redhat.com/documentation/en-us/red_hat_virtualization/4.4/html-single/virtual_machine_management_guide/index?extIdCarryOver=true&sc_cid=701f2000001Css5AAC#Automatic_High_Performance_Configuration_Settings
+	if ms.machineProviderSpec.VMType == string(ovirtC.VMTypeHighPerformance) {
+		optionalVMParams.WithSoundcardEnabled(false)
 	}
 
 	instance, err := ms.ovirtClient.CreateVM(ovirtC.ClusterID(clusterId),

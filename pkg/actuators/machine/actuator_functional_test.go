@@ -103,16 +103,23 @@ func TestActuator(t *testing.T) {
 				}
 			},
 			verify: func(inputSpec *machinev1.Machine, createdVM ovirtclient.VM, helper ovirtclient.TestHelper) {
+				// check soundcard
 				if createdVM.SoundcardEnabled() {
 					t.Errorf("Expected soundcard to be disabled for high performance VM")
 				}
 
+				// check headless mode - no graphics consoles == headless
 				graphicsConsoles, err := createdVM.ListGraphicsConsoles()
 				if err != nil {
 					t.Errorf("Unexpected error getting graphics consoles: %v", err)
 				}
 				if len(graphicsConsoles) > 0 {
 					t.Errorf("Expected headless mode, but found %d graphics consoles", len(graphicsConsoles))
+				}
+
+				// check serial console
+				if !createdVM.SerialConsole() {
+					t.Errorf("Expected serial console to be enabled for high performance VM")
 				}
 			},
 		},

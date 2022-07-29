@@ -190,6 +190,7 @@ func (ms *machineScope) create() error {
 	// see: https://access.redhat.com/documentation/en-us/red_hat_virtualization/4.4/html-single/virtual_machine_management_guide/index?extIdCarryOver=true&sc_cid=701f2000001Css5AAC#Automatic_High_Performance_Configuration_Settings
 	if ms.machineProviderSpec.VMType == string(ovirtC.VMTypeHighPerformance) {
 		optionalVMParams.WithSoundcardEnabled(false)
+		optionalVMParams.WithSerialConsole(true)
 	}
 
 	instance, err := ms.ovirtClient.CreateVM(ovirtC.ClusterID(clusterId),

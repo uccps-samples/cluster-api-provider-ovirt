@@ -106,6 +106,14 @@ func TestActuator(t *testing.T) {
 				if createdVM.SoundcardEnabled() {
 					t.Errorf("Expected soundcard to be disabled for high performance VM")
 				}
+
+				graphicsConsoles, err := createdVM.ListGraphicsConsoles()
+				if err != nil {
+					t.Errorf("Unexpected error getting graphics consoles: %v", err)
+				}
+				if len(graphicsConsoles) > 0 {
+					t.Errorf("Expected headless mode, but found %d graphics consoles", len(graphicsConsoles))
+				}
 			},
 		},
 	}

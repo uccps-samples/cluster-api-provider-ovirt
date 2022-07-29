@@ -186,6 +186,7 @@ func (ms *machineScope) create() error {
 		})
 	}
 
+	// apply high_performance rules
 	// see: https://access.redhat.com/documentation/en-us/red_hat_virtualization/4.4/html-single/virtual_machine_management_guide/index?extIdCarryOver=true&sc_cid=701f2000001Css5AAC#Automatic_High_Performance_Configuration_Settings
 	if ms.machineProviderSpec.VMType == string(ovirtC.VMTypeHighPerformance) {
 		optionalVMParams.WithSoundcardEnabled(false)
@@ -204,6 +205,22 @@ func (ms *machineScope) create() error {
 	_, err = ms.ovirtClient.WaitForVMStatus(instance.ID(), ovirtC.VMStatusDown, ovirtC.ContextStrategy(ms.Context))
 	if err != nil {
 		return errors.Wrap(err, "error creating oVirt VM")
+	}
+
+	// apply high_performance rules
+	// see: https://access.redhat.com/documentation/en-us/red_hat_virtualization/4.4/html-single/virtual_machine_management_guide/index?extIdCarryOver=true&sc_cid=701f2000001Css5AAC#Automatic_High_Performance_Configuration_Settings
+	if ms.machineProviderSpec.VMType == string(ovirtC.VMTypeHighPerformance) {
+		graphicsConsoles, err := instance.ListGraphicsConsoles()
+		if err != nil {
+			return errors.Wrapf(err, "failed to list graphics consoles")
+		}
+		for _, graphicsConsole := range graphicsConsoles {
+			err := graphicsConsole.Remove()
+			if err != nil {
+				return errors.Wrapf(err, "failed to remove graphics console '%s' from VM '%s'",
+					graphicsConsole.ID(), graphicsConsole.VMID())
+			}
+		}
 	}
 
 	var bootableDiskAttachment ovirtC.DiskAttachment

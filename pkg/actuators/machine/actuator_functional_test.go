@@ -4,6 +4,7 @@ package machine_test
 
 import (
 	"context"
+	"fmt"
 	"path/filepath"
 	"testing"
 	"time"
@@ -37,7 +38,7 @@ func TestActuator(t *testing.T) {
 	defer cancel()
 
 	k8sClient := mgr.GetClient()
-	const namespace = "ovirt-namespace"
+	const namespace = "openshift-machine-api"
 	k8sComponentCleanup := setupK8sComponents(t, k8sClient, namespace)
 	defer k8sComponentCleanup()
 
@@ -162,11 +163,13 @@ func TestActuator(t *testing.T) {
 			}
 
 			newActuator := actuator.NewActuator(actuator.ActuatorParams{
-				Client:             k8sClient,
-				Namespace:          namespace,
-				Scheme:             scheme.Scheme,
-				OVirtClientFactory: ovirt.NewOvirtMockClientFactory(helper),
-				EventRecorder:      mgr.GetEventRecorderFor("ovirtprovider"),
+				Client:    k8sClient,
+				Namespace: namespace,
+				Scheme:    scheme.Scheme,
+				OVirtClientFactory: ovirt.NewOvirtClientFactory(k8sClient, func(creds *ovirt.Creds) (ovirtclient.Client, error) {
+					return helper.GetClient(), nil
+				}),
+				EventRecorder: mgr.GetEventRecorderFor("ovirtprovider"),
 			})
 
 			testcase.execute(newActuator, machine)
@@ -206,12 +209,34 @@ func setupK8sComponents(t *testing.T, k8sClient client.Client, namespace string)
 		t.Fatalf("Unexpected error occurred while creating k8s user secret: %v", err)
 	}
 
+	ovirtCredentials := &k8sCorev1.Secret{
+		ObjectMeta: k8sMetav1.ObjectMeta{
+			Name:      "ovirt-credentials",
+			Namespace: namespace,
+		},
+		StringData: map[string]string{
+			"ovirt_url":       "http://localhost/ovirt-engine/api",
+			"ovirt_username":  "user@internal",
+			"ovirt_password":  "topsecret",
+			"ovirt_cafile":    "",
+			"ovirt_insecure":  "true",
+			"ovirt_ca_bundle": "",
+		},
+	}
+	err = k8sClient.Create(context.Background(), ovirtCredentials)
+	if err != nil {
+		t.Fatalf("Unexpected error occurred while creating k8s ovirt credentials secret: %v", err)
+	}
+
 	return func() {
 		if err := k8sClient.Delete(context.Background(), testNamespace); err != nil {
 			t.Errorf("Unexpected error occurred while deleting k8s namespace: %v", err)
 		}
 		if err := k8sClient.Delete(context.Background(), userDataSecret); err != nil {
 			t.Errorf("Unexpected error occurred while deleting k8s user secret: %v", err)
+		}
+		if err := k8sClient.Delete(context.Background(), ovirtCredentials); err != nil {
+			t.Errorf("Unexpected error occurred while deleting k8s ovirt credentials secret: %v", err)
 		}
 	}
 }
@@ -314,5 +339,126 @@ func basicOVirtSpec(templateName string, clusterID string) *capoV1Beta1.OvirtMac
 		AutoPinningPolicy:  "",
 		Hugepages:          0,
 		GuaranteedMemoryMB: 10000,
+	}
+}
+
+// failingOVirtClient embeds ovirtclient.Client from the TestHelper and redefines Test()
+// to always fail, thereby simulating a credentials change
+type failingOVirtClient struct {
+	ovirtclient.Client
+}
+
+func (mc failingOVirtClient) Test(retries ...ovirtclient.RetryStrategy) error {
+	return fmt.Errorf("Ups, I did it again")
+}
+
+func newFailingOVirtClient(helper ovirtclient.TestHelper) failingOVirtClient {
+	return failingOVirtClient{
+		Client: helper.GetClient(),
+	}
+}
+
+func TestActuatorCredentialsUpdate(t *testing.T) {
+	cfg, stopEnv := setupTestEnv(t)
+	defer stopEnv()
+
+	mgr, cancel := setupCtrlManager(t, cfg)
+	defer cancel()
+
+	k8sClient := mgr.GetClient()
+	const namespace = "openshift-machine-api"
+	k8sComponentCleanup := setupK8sComponents(t, k8sClient, namespace)
+	defer k8sComponentCleanup()
+
+	helper, err := ovirtclient.NewMockTestHelper(ovirtclientlog.NewTestLogger(t))
+	if err != nil {
+		t.Fatalf("Unexpected error occurred setting up test helper: %v", err)
+	}
+
+	ctx := context.Background()
+
+	templateName := "ovirt14-vhd9b-rhcos"
+	ovirtSpec := basicOVirtSpec(templateName, string(helper.GetClusterID()))
+	templateVMCreateParams := ovirtclient.NewCreateVMParams()
+
+	setupVMTemplate(t, helper, templateName, templateVMCreateParams)
+	ovirtSpecRaw, err := capoV1Beta1.RawExtensionFromProviderSpec(ovirtSpec)
+	if err != nil {
+		t.Fatalf("Unexpected error occurred while parsing oVirtSpec: %v", err)
+	}
+
+	machine := basicMachineWithoutSpec(namespace)
+	machine.Spec.ProviderSpec.Value = ovirtSpecRaw
+	err = k8sClient.Create(ctx, machine)
+	if err != nil {
+		t.Fatalf("Unexpected error occurred while creating machine: %v", err)
+	}
+	defer func() {
+		err = k8sClient.Delete(ctx, machine)
+		if err != nil {
+			t.Errorf("Unexpected error occurred while deleting machine: %v", err)
+		}
+	}()
+
+	// Ensure the machine has synced to the cache
+	if !waitForMachine(ctx, k8sClient, machine) {
+		t.Fatalf("Unexpected error occurred while waiting for machine to be synced")
+	}
+
+	var finalCredentials *ovirt.Creds
+	newActuator := actuator.NewActuator(actuator.ActuatorParams{
+		Client:    k8sClient,
+		Namespace: namespace,
+		Scheme:    scheme.Scheme,
+		OVirtClientFactory: ovirt.NewOvirtClientFactory(k8sClient, func(creds *ovirt.Creds) (ovirtclient.Client, error) {
+			finalCredentials = creds
+			return newFailingOVirtClient(helper), nil
+		}),
+		EventRecorder: mgr.GetEventRecorderFor("ovirtprovider"),
+	})
+
+	// execute the actuator the first time
+	err = newActuator.Create(ctx, machine)
+	if err != nil {
+		t.Fatalf("Unexpected error occurred while calling actuator create: %v", err)
+	}
+
+	// update the credentials in k8s
+	newOVirtUser := "anotherone@internal"
+	newOVirtPassword := "differentpassword"
+	ovirtCredentials := &k8sCorev1.Secret{
+		ObjectMeta: k8sMetav1.ObjectMeta{
+			Name:      "ovirt-credentials",
+			Namespace: namespace,
+		},
+		StringData: map[string]string{
+			"ovirt_url":       "http://localhost/ovirt-engine/api",
+			"ovirt_username":  newOVirtUser,
+			"ovirt_password":  newOVirtPassword,
+			"ovirt_cafile":    "",
+			"ovirt_insecure":  "true",
+			"ovirt_ca_bundle": "",
+		},
+	}
+	err = k8sClient.Update(context.Background(), ovirtCredentials)
+	if err != nil {
+		t.Fatalf("Unexpected error occurred while updating k8s ovirt credentials secret: %v", err)
+	}
+
+	// execute the actuator a second time
+	err = newActuator.Create(ctx, machine)
+	if err != nil {
+		t.Fatalf("Unexpected error occurred while calling actuator create: %v", err)
+	}
+
+	if finalCredentials == nil {
+		t.Fatal("oVirtClientFactory hase never been called")
+	}
+
+	if finalCredentials.Username != newOVirtUser || finalCredentials.Password != newOVirtPassword {
+		t.Fatalf("Expected updated credentials to be ('%s', '%s'), but got ('%s', '%s')",
+			newOVirtUser, newOVirtPassword,
+			finalCredentials.Username, finalCredentials.Password,
+		)
 	}
 }

@@ -136,7 +136,7 @@ func main() {
 		Client:             mgr.GetClient(),
 		Scheme:             mgr.GetScheme(),
 		EventRecorder:      mgr.GetEventRecorderFor("ovirtprovider"),
-		OVirtClientFactory: ovirt.NewOvirtClientFactory(mgr.GetClient()),
+		OVirtClientFactory: ovirt.NewOvirtClientFactory(mgr.GetClient(), ovirt.CreateNewOVirtClient),
 	})
 
 	capimachine.AddWithActuator(mgr, machineActuator)

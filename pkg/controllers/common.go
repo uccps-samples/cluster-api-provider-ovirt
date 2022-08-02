@@ -43,13 +43,17 @@ type OVirtClientFactory interface {
 
 type oVirtClientFactory struct {
 	oVirtClient ovirtclient.Client
+	create      CreateOVirtClientFunc
 
 	k8sClient client.Client
 }
 
-func NewOvirtClientFactory(k8sClient client.Client) *oVirtClientFactory {
+type CreateOVirtClientFunc func(creds *Creds) (ovirtclient.Client, error)
+
+func NewOvirtClientFactory(k8sClient client.Client, create CreateOVirtClientFunc) *oVirtClientFactory {
 	return &oVirtClientFactory{
 		oVirtClient: nil,
+		create:      create,
 		k8sClient:   k8sClient,
 	}
 }
@@ -62,7 +66,7 @@ func (factory *oVirtClientFactory) GetOVirtClient() (ovirtclient.Client, error) 
 			return nil, err
 		}
 
-		factory.oVirtClient, err = factory.createNew(creds)
+		factory.oVirtClient, err = factory.create(creds)
 		if err != nil {
 			return nil, fmt.Errorf("failed creating ovirt connection %w", err)
 		}
@@ -82,7 +86,7 @@ func (factory *oVirtClientFactory) fetchCredentials() (*Creds, error) {
 	return creds, nil
 }
 
-func (factory *oVirtClientFactory) createNew(creds *Creds) (ovirtclient.Client, error) {
+func CreateNewOVirtClient(creds *Creds) (ovirtclient.Client, error) {
 	tls := ovirtclient.TLS()
 	if creds.Insecure {
 		tls.Insecure()
@@ -103,25 +107,4 @@ func (factory *oVirtClientFactory) createNew(creds *Creds) (ovirtclient.Client, 
 		kloglogger.New(),
 		nil,
 	)
-}
-
-type oVirtMockClientFactory struct {
-	helper    ovirtclient.TestHelper
-	k8sClient client.Client
-}
-
-func NewOvirtMockClientFactory(helper ovirtclient.TestHelper) *oVirtMockClientFactory {
-	return &oVirtMockClientFactory{
-		helper:    helper,
-		k8sClient: nil,
-	}
-}
-
-func (factory *oVirtMockClientFactory) WithK8sClient(k8sClient client.Client) *oVirtMockClientFactory {
-	factory.k8sClient = k8sClient
-	return factory
-}
-
-func (factory *oVirtMockClientFactory) GetOVirtClient() (ovirtclient.Client, error) {
-	return factory.helper.GetClient(), nil
 }

@@ -108,7 +108,7 @@ func NewProviderIDController(mgr manager.Manager) *providerIDController {
 			Log:    log.Log.WithName("controllers").WithName(controllerName),
 			Client: mgr.GetClient(),
 
-			OVirtClientFactory: common.NewOvirtClientFactory(mgr.GetClient()),
+			OVirtClientFactory: common.NewOvirtClientFactory(mgr.GetClient(), common.CreateNewOVirtClient),
 		},
 	}
 }

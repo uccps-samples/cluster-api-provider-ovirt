@@ -122,6 +122,20 @@ func TestActuator(t *testing.T) {
 				if !createdVM.SerialConsole() {
 					t.Errorf("Expected serial console to be enabled for high performance VM")
 				}
+
+				placementPolicy, placementPolicyExists := createdVM.PlacementPolicy()
+				if !placementPolicyExists {
+					t.Fatal("Expected placement policy to be set")
+				}
+				if placementPolicy.Affinity() == nil {
+					t.Fatal("Expected affinity of placement policy to be set")
+				}
+				if *placementPolicy.Affinity() != ovirtclient.VMAffinityUserMigratable {
+					t.Errorf("Expected affinity of placement policy to be %s, but got %s",
+						ovirtclient.VMAffinityUserMigratable,
+						*placementPolicy.Affinity(),
+					)
+				}
 			},
 		},
 	}

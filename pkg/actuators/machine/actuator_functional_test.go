@@ -136,6 +136,14 @@ func TestActuator(t *testing.T) {
 						*placementPolicy.Affinity(),
 					)
 				}
+
+				// check CPU mode
+				if createdVM.CPU().Mode() == nil {
+					t.Fatal("Expected CPU mode not to be nil")
+				}
+				if *createdVM.CPU().Mode() != ovirtclient.CPUModeHostPassthrough {
+					t.Errorf("Expected CPU mode to be Host Pass-Through for high performance VM")
+				}
 			},
 		},
 	}

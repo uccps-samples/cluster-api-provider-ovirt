@@ -100,29 +100,23 @@ func (ms *machineScope) create() error {
 		}
 	}
 
-	isAutoPinning := false
-	if ms.machineProviderSpec.AutoPinningPolicy != "" {
-
-		if ms.machineProviderSpec.AutoPinningPolicy == "resize_and_pin" {
-
-			isAutoPinning = true
-			hosts, err := ms.ovirtClient.ListHosts(ovirtC.ContextStrategy(ms.Context))
+	optionalPlacementPolicy := ovirtC.NewVMPlacementPolicyParameters()
+	isAutoPinning := ms.machineProviderSpec.AutoPinningPolicy != "" && ms.machineProviderSpec.AutoPinningPolicy != "none"
+	if isAutoPinning {
+		hosts, err := ms.ovirtClient.ListHosts(ovirtC.ContextStrategy(ms.Context))
+		if err != nil {
+			return errors.Wrap(err, "error Listing hosts")
+		}
+		hostIDs := make([]ovirtC.HostID, 0)
+		for _, host := range hosts {
+			if string(host.ClusterID()) == clusterId {
+				hostIDs = append(hostIDs, host.ID())
+			}
+		}
+		if len(hostIDs) > 0 {
+			optionalPlacementPolicy, err = optionalPlacementPolicy.WithHostIDs(hostIDs)
 			if err != nil {
-				return errors.Wrap(err, "error Listing hosts")
-			}
-
-			hostIDs := make([]ovirtC.HostID, 0)
-			for _, host := range hosts {
-				if string(host.ClusterID()) == clusterId {
-					hostIDs = append(hostIDs, host.ID())
-				}
-			}
-			if len(hostIDs) > 0 {
-				optionalPlacementPolicy, err := ovirtC.NewVMPlacementPolicyParameters().WithHostIDs(hostIDs)
-				if err != nil {
-					return errors.Wrap(err, "error creating Placement policy")
-				}
-				optionalVMParams = optionalVMParams.WithPlacementPolicy(optionalPlacementPolicy)
+				return errors.Wrapf(err, "failed to create placement policy parameters with host IDs: %v", hostIDs)
 			}
 		}
 	}
@@ -186,12 +180,17 @@ func (ms *machineScope) create() error {
 		})
 	}
 
+	vmAffinity := ovirtC.VMAffinityMigratable
 	// apply high_performance rules
 	// see: https://access.redhat.com/documentation/en-us/red_hat_virtualization/4.4/html-single/virtual_machine_management_guide/index?extIdCarryOver=true&sc_cid=701f2000001Css5AAC#Automatic_High_Performance_Configuration_Settings
 	if ms.machineProviderSpec.VMType == string(ovirtC.VMTypeHighPerformance) {
+		vmAffinity = ovirtC.VMAffinityUserMigratable
 		optionalVMParams.WithSoundcardEnabled(false)
 		optionalVMParams.WithSerialConsole(true)
 	}
+
+	optionalPlacementPolicy = optionalPlacementPolicy.MustWithAffinity(vmAffinity)
+	optionalVMParams = optionalVMParams.WithPlacementPolicy(optionalPlacementPolicy)
 
 	instance, err := ms.ovirtClient.CreateVM(ovirtC.ClusterID(clusterId),
 		temp.ID(),

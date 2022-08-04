@@ -187,6 +187,11 @@ func (ms *machineScope) create() error {
 		vmAffinity = ovirtC.VMAffinityUserMigratable
 		optionalVMParams.WithSoundcardEnabled(false)
 		optionalVMParams.WithSerialConsole(true)
+
+		cpuMode := ovirtC.NewVMCPUParams()
+		cpuMode = cpuMode.MustWithMode(ovirtC.CPUModeHostPassthrough)
+		optionalVMParams = optionalVMParams.MustWithCPU(cpuMode)
+
 	}
 
 	optionalPlacementPolicy = optionalPlacementPolicy.MustWithAffinity(vmAffinity)

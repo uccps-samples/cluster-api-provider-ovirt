@@ -11,7 +11,7 @@ import (
 	machinev1 "github.com/openshift/api/machine/v1beta1"
 	"github.com/openshift/client-go/machine/clientset/versioned/typed/machine/v1beta1"
 	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
-	common "github.com/openshift/cluster-api-provider-ovirt/pkg/controllers"
+	"github.com/openshift/cluster-api-provider-ovirt/pkg/ovirt"
 	apierrors "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
@@ -28,7 +28,7 @@ type ActuatorParams struct {
 	Scheme             *runtime.Scheme
 	MachinesClient     v1beta1.MachineV1beta1Interface
 	EventRecorder      record.EventRecorder
-	OVirtClientFactory common.OVirtClientFactory
+	OVirtClientFactory ovirt.OVirtClientFactory
 }
 
 // OvirtActuator is responsible for performing machine reconciliation on oVirt platform.
@@ -37,7 +37,7 @@ type OvirtActuator struct {
 	scheme             *runtime.Scheme
 	client             client.Client
 	eventRecorder      record.EventRecorder
-	ovirtClientFactory common.OVirtClientFactory
+	ovirtClientFactory ovirt.OVirtClientFactory
 }
 
 // NewActuator returns an Ovirt Actuator.

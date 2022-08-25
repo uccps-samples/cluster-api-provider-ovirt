@@ -26,9 +26,8 @@ import (
 	machinev1 "github.com/openshift/api/machine/v1beta1"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/actuators/machine"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/apis"
-	ovirt "github.com/openshift/cluster-api-provider-ovirt/pkg/controllers"
-	"github.com/openshift/cluster-api-provider-ovirt/pkg/controllers/nodeController"
-	"github.com/openshift/cluster-api-provider-ovirt/pkg/controllers/providerIDcontroller"
+	"github.com/openshift/cluster-api-provider-ovirt/pkg/controller"
+	"github.com/openshift/cluster-api-provider-ovirt/pkg/ovirt"
 	capimachine "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -141,8 +140,8 @@ func main() {
 
 	capimachine.AddWithActuator(mgr, machineActuator)
 
-	providerIDcontroller.Add(mgr)
-	nodeController.Add(mgr)
+	controller.NewProviderIDController(mgr.GetClient()).AddToManager(mgr)
+	controller.NewNodeController(mgr.GetClient()).AddToManager(mgr)
 
 	if err := mgr.AddReadyzCheck("ping", healthz.Ping); err != nil {
 		klog.Fatal(err)

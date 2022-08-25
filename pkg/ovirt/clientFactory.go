@@ -2,40 +2,12 @@ package ovirt
 
 import (
 	"fmt"
-	"time"
 
-	"github.com/go-logr/logr"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
 	kloglogger "github.com/ovirt/go-ovirt-client-log-klog/v2"
 	ovirtclient "github.com/ovirt/go-ovirt-client/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 )
-
-const requeueDefaultTime = 30 * time.Second
-
-func ResultRequeueAfter(sec int) reconcile.Result {
-	return reconcile.Result{RequeueAfter: time.Duration(sec) * time.Second}
-}
-
-func ResultRequeueDefault() reconcile.Result {
-	return reconcile.Result{RequeueAfter: requeueDefaultTime}
-}
-
-func ResultNoRequeue() reconcile.Result {
-	return reconcile.Result{Requeue: false}
-}
-
-type BaseController struct {
-	Log                logr.Logger
-	Client             client.Client
-	OVirtClientFactory OVirtClientFactory
-}
-
-// GetoVirtClient returns a a client to oVirt's API endpoint
-func (b *BaseController) GetoVirtClient() (ovirtclient.Client, error) {
-	return b.OVirtClientFactory.GetOVirtClient()
-}
 
 type OVirtClientFactory interface {
 	GetOVirtClient() (ovirtclient.Client, error)
@@ -79,7 +51,7 @@ func (factory *oVirtClientFactory) isConnected() bool {
 }
 
 func (factory *oVirtClientFactory) fetchCredentials() (*Creds, error) {
-	creds, err := GetCredentialsSecret(factory.k8sClient, utils.NAMESPACE, utils.OvirtCloudCredsSecretName)
+	creds, err := getCredentialsSecret(factory.k8sClient, utils.NAMESPACE, utils.OvirtCloudCredsSecretName)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting credentials for namespace %s, %w", utils.NAMESPACE, err)
 	}

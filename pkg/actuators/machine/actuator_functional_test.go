@@ -23,7 +23,7 @@ import (
 
 	actuator "github.com/openshift/cluster-api-provider-ovirt/pkg/actuators/machine"
 	capoV1Beta1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
-	ovirt "github.com/openshift/cluster-api-provider-ovirt/pkg/controllers"
+	"github.com/openshift/cluster-api-provider-ovirt/pkg/ovirt"
 )
 
 func init() {
@@ -298,7 +298,7 @@ func setupCtrlManager(t *testing.T, cfg *rest.Config) (manager.Manager, func()) 
 	mgrCtx, cancel := context.WithCancel(context.Background())
 	go func() {
 		if err := mgr.Start(mgrCtx); err != nil {
-			t.Fatalf("Unexpected error occurred while running manager: %v", err)
+			panic(fmt.Sprintf("Unexpected error occurred while running manager: %v", err))
 		}
 	}()
 

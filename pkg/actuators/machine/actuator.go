@@ -125,9 +125,11 @@ func (actuator *OvirtActuator) Update(ctx context.Context, machine *machinev1.Ma
 // A machine which is not terminated is considered as existing.
 func (actuator *OvirtActuator) Exists(ctx context.Context, machine *machinev1.Machine) (bool, error) {
 	klog.Infof("Checking machine %v exists.\n", machine.Name)
+
 	ovirtClient, err := actuator.ovirtClientFactory.GetOVirtClient()
 	if err != nil {
-		return false, errors.Wrap(err, "failed to create connection to oVirt API")
+		return false, actuator.handleMachineError(machine, "Exists", apierrors.InvalidMachineConfiguration(
+			"failed to create connection to oVirt API: %v", err))
 	}
 	mScope := newMachineScope(ctx, ovirtClient, actuator.client, machine, nil)
 
@@ -136,10 +138,12 @@ func (actuator *OvirtActuator) Exists(ctx context.Context, machine *machinev1.Ma
 
 // Delete deletes the VM from the RHV environment
 func (actuator *OvirtActuator) Delete(ctx context.Context, machine *machinev1.Machine) error {
-	ovirtClient, err := actuator.ovirtClientFactory.GetOVirtClient()
+	klog.Infof("Deleting machine %v.\n", machine.Name)
 
+	ovirtClient, err := actuator.ovirtClientFactory.GetOVirtClient()
 	if err != nil {
-		return errors.Wrap(err, "failed to create connection to oVirt API")
+		return actuator.handleMachineError(machine, "Delete", apierrors.InvalidMachineConfiguration(
+			"failed to create connection to oVirt API: %v", err))
 	}
 
 	mScope := newMachineScope(ctx, ovirtClient, actuator.client, machine, nil)

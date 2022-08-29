@@ -9,7 +9,7 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"io/ioutil"
+	"os"
 	"strconv"
 	"strings"
 
@@ -19,19 +19,28 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+type Creds struct {
+	URL      string
+	Username string
+	Password string
+	CAFile   string
+	Insecure bool
+	CABundle string
+}
+
 const (
-	UrlField      = "ovirt_url"
-	UsernameField = "ovirt_username"
-	PasswordField = "ovirt_password"
-	CafileField   = "ovirt_cafile"
-	InsecureField = "ovirt_insecure"
-	CaBundleField = "ovirt_ca_bundle"
+	secretFieldUrl      = "ovirt_url"
+	secretFieldUsername = "ovirt_username"
+	secretFieldPassword = "ovirt_password"
+	secretFieldCafile   = "ovirt_cafile"
+	secretFieldInsecure = "ovirt_insecure"
+	secretFieldCaBundle = "ovirt_ca_bundle"
 )
 
 //TODO: remove CAFILE and use CABundle on CreateAPIConnection
 
-// GetCredentialsSecret fetches the secret in the given namespace which contains the oVirt engine credentials
-func GetCredentialsSecret(coreClient client.Client, namespace string, secretName string) (*Creds, error) {
+// getCredentialsSecret fetches the secret in the given namespace which contains the oVirt engine credentials
+func getCredentialsSecret(coreClient client.Client, namespace string, secretName string) (*Creds, error) {
 	var credentialsSecret apicorev1.Secret
 	key := client.ObjectKey{Namespace: namespace, Name: secretName}
 
@@ -45,16 +54,16 @@ func GetCredentialsSecret(coreClient client.Client, namespace string, secretName
 	}
 
 	o := Creds{}
-	o.URL = string(credentialsSecret.Data[UrlField])
-	o.Username = string(credentialsSecret.Data[UsernameField])
-	o.Password = string(credentialsSecret.Data[PasswordField])
-	o.CAFile = string(credentialsSecret.Data[CafileField])
-	insecure, err := strconv.ParseBool(string(credentialsSecret.Data[InsecureField]))
+	o.URL = string(credentialsSecret.Data[secretFieldUrl])
+	o.Username = string(credentialsSecret.Data[secretFieldUsername])
+	o.Password = string(credentialsSecret.Data[secretFieldPassword])
+	o.CAFile = string(credentialsSecret.Data[secretFieldCafile])
+	insecure, err := strconv.ParseBool(string(credentialsSecret.Data[secretFieldInsecure]))
 	if err != nil {
-		return nil, fmt.Errorf("failed to identify %s in credentials %w", InsecureField, err)
+		return nil, fmt.Errorf("failed to identify %s in credentials %w", secretFieldInsecure, err)
 	}
 	o.Insecure = insecure
-	o.CABundle = string(credentialsSecret.Data[CaBundleField])
+	o.CABundle = string(credentialsSecret.Data[secretFieldCaBundle])
 
 	// write CA bundle to a file if exist.
 	// its best if we could mount the secret into a file,
@@ -72,12 +81,12 @@ func GetCredentialsSecret(coreClient client.Client, namespace string, secretName
 
 // TODO: remove after we port to CABundle
 func writeCA(source io.Reader) (string, error) {
-	f, err := ioutil.TempFile("", "ovirt-ca-bundle")
+	f, err := os.CreateTemp("", "ovirt-ca-bundle")
 	if err != nil {
 		return "", err
 	}
 	defer f.Close()
-	content, err := ioutil.ReadAll(source)
+	content, err := io.ReadAll(source)
 	if err != nil {
 		return "", err
 	}

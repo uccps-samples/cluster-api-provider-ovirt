@@ -67,6 +67,13 @@ and can be run via
 make test-functional
 ```
 
+### Testing on OpenShift cluster
+
+In contrast to local [unit testing](#unit-testing) and [functional testing](#functional-testing), building and deploying the changed `cluster-api-provider-ovirt` to a running OpenShift cluster helps manually verifying the expected behavior of the component end to end. 
+
+For detailed instructions on how to exchange the predefined provider see [./docs/custom-capo.md](./docs/custom-capo.md).
+
+
 ## Run the components locally
 
 ```console

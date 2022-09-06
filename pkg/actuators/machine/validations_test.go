@@ -46,6 +46,90 @@ func TestValidateMachine(t *testing.T) {
 			}),
 			expectIsValid: false,
 		},
+		{
+			name: "validation of machine provider spec without OSDisk fails",
+			spec: BasicValidSpec(func(omps *v1beta1.OvirtMachineProviderSpec) *v1beta1.OvirtMachineProviderSpec {
+				omps.OSDisk = nil
+				return omps
+			}),
+			expectIsValid: false,
+		},
+		{
+			name: "validation of machine provider spec with OSDisk size 0 fails",
+			spec: BasicValidSpec(func(omps *v1beta1.OvirtMachineProviderSpec) *v1beta1.OvirtMachineProviderSpec {
+				omps.OSDisk.SizeGB = 0
+				return omps
+			}),
+			expectIsValid: false,
+		},
+		{
+			name: "validation of machine provider spec with instance type ID set at the same time as MemoryMB and CPU fails",
+			spec: BasicValidSpec(func(omps *v1beta1.OvirtMachineProviderSpec) *v1beta1.OvirtMachineProviderSpec {
+				omps.InstanceTypeId = "Metal"
+				return omps
+			}),
+			expectIsValid: false,
+		},
+		{
+			// This test now fails due to duplicate check of MemoryMB == 0 that happens in validateGuaranteedMemory func
+			// in validations.go, setting expectIsValid: false instead of true before it's fixed
+			name: "validation of machine provider spec with only instance type ID succeeds",
+			spec: BasicValidSpec(func(omps *v1beta1.OvirtMachineProviderSpec) *v1beta1.OvirtMachineProviderSpec {
+				omps.CPU = nil
+				omps.MemoryMB = 0
+				omps.InstanceTypeId = "Metal"
+				return omps
+			}),
+			expectIsValid: false,
+		},
+		{
+			name: "validation of machine provider spec without MemoryMB fails",
+			spec: BasicValidSpec(func(omps *v1beta1.OvirtMachineProviderSpec) *v1beta1.OvirtMachineProviderSpec {
+				omps.MemoryMB = 0
+				return omps
+			}),
+			expectIsValid: false,
+		},
+		{
+			name: "validation of machine provider spec without CPU fails",
+			spec: BasicValidSpec(func(omps *v1beta1.OvirtMachineProviderSpec) *v1beta1.OvirtMachineProviderSpec {
+				omps.CPU = nil
+				return omps
+			}),
+			expectIsValid: false,
+		},
+		{
+			name: "validation of machine provider spec with invalid VM type fails",
+			spec: BasicValidSpec(func(omps *v1beta1.OvirtMachineProviderSpec) *v1beta1.OvirtMachineProviderSpec {
+				omps.VMType = "wrong_type"
+				return omps
+			}),
+			expectIsValid: false,
+		},
+		{
+			name: "validation of machine provider spec with empty VM type fails",
+			spec: BasicValidSpec(func(omps *v1beta1.OvirtMachineProviderSpec) *v1beta1.OvirtMachineProviderSpec {
+				omps.VMType = ""
+				return omps
+			}),
+			expectIsValid: false,
+		},
+		{
+			name: "validation of machine provider spec with invalid Hugepages value fails",
+			spec: BasicValidSpec(func(omps *v1beta1.OvirtMachineProviderSpec) *v1beta1.OvirtMachineProviderSpec {
+				omps.Hugepages = -666
+				return omps
+			}),
+			expectIsValid: false,
+		},
+		{
+			name: "validation of machine provider spec with Guaranteeed memory bigger than MemoryMB fails",
+			spec: BasicValidSpec(func(omps *v1beta1.OvirtMachineProviderSpec) *v1beta1.OvirtMachineProviderSpec {
+				omps.GuaranteedMemoryMB = 24000
+				return omps
+			}),
+			expectIsValid: false,
+		},
 	}
 	for _, testcase := range testCases {
 		t.Run(testcase.name, func(t *testing.T) {

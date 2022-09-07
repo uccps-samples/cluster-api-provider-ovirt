@@ -32,7 +32,7 @@ type nodeController struct {
 }
 
 // Creates a new Node Controller.
-func NewNodeController(k8sClient client.Client) *nodeController {
+func NewNodeController(k8sClient client.Client, cachedOVirtClient ovirt.CachedOVirtClient) *nodeController {
 	log.SetLogger(klogr.New())
 	ctrlName := "NodeController"
 
@@ -41,8 +41,8 @@ func NewNodeController(k8sClient client.Client) *nodeController {
 			Name: ctrlName,
 			Log:  log.Log.WithName("controllers").WithName(ctrlName),
 
-			Client:             k8sClient,
-			OVirtClientFactory: ovirt.NewOvirtClientFactory(k8sClient, ovirt.CreateNewOVirtClient),
+			Client:            k8sClient,
+			CachedOVirtClient: cachedOVirtClient,
 		},
 	}
 }

@@ -17,8 +17,10 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"time"
 
@@ -28,8 +30,11 @@ import (
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/apis"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/controller"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/ovirt"
+	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
 	capimachine "github.com/openshift/machine-api-operator/pkg/controller/machine"
+	"k8s.io/client-go/rest"
 	"k8s.io/klog"
+	"k8s.io/klog/v2/klogr"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	logz "sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -48,6 +53,109 @@ var (
 func main() {
 	klog.InitFlags(nil)
 
+	log := logz.New().WithName("ovirt-controller-manager")
+	entryLog := log.WithName("entrypoint")
+
+	cfg := config.GetConfigOrDie()
+	if cfg == nil {
+		panic(fmt.Errorf("GetConfigOrDie didn't die and cfg is nil"))
+	}
+
+	// create oVirt client service to create cached clients syncing with secrets
+	ctx, cancel := context.WithCancel(context.Background())
+	oVirtClientService := ovirt.NewClientService(cfg, ovirt.SecretsToWatch{
+		Namespace:  utils.NAMESPACE,
+		SecretName: utils.OvirtCloudCredsSecretName,
+	})
+
+	flags := parseFlags()
+
+	mgr, err := setupManager(cfg, flags.ToManagerOptions(), oVirtClientService)
+	if err != nil {
+		entryLog.Error(err, "Unable to set up controller manager")
+		os.Exit(1)
+	}
+
+	capimachine.AddWithActuator(mgr, machine.NewActuator(machine.ActuatorParams{
+		Namespace:         flags.Namespace,
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
+		EventRecorder:     mgr.GetEventRecorderFor("ovirtprovider"),
+		CachedOVirtClient: oVirtClientService.NewCachedClient("actuator"),
+	}))
+	controller.NewProviderIDController(mgr.GetClient(), oVirtClientService.NewCachedClient("providerID")).AddToManager(mgr)
+	controller.NewNodeController(mgr.GetClient(), oVirtClientService.NewCachedClient("node")).AddToManager(mgr)
+
+	// start the service to receive secret updates and immediately return
+	oVirtClientService.Run(ctx)
+
+	err = mgr.Start(signals.SetupSignalHandler())
+
+	// shutdown oVirt client service
+	cancel()
+	oVirtClientService.Shutdown(3 * time.Second)
+
+	if err != nil {
+		entryLog.Error(err, "unable to run manager")
+		os.Exit(1)
+	}
+}
+
+func healthCheck(cachedOVirtClient ovirt.CachedOVirtClient) func(*http.Request) error {
+	return func(req *http.Request) error {
+		logger := klogr.New().WithName("HealthzCheck").V(4)
+		logger.Info("starting healthz check...")
+
+		client, err := cachedOVirtClient.Get()
+		if err != nil {
+			logger.Error(err, "failed to get ovirt client")
+			return err
+		}
+		err = client.Test()
+		if err != nil {
+			logger.Error(err, "ovirt client connection test failed")
+			return err
+		}
+		logger.Info("finished healthz check")
+
+		return nil
+	}
+}
+
+type Flags struct {
+	Namespace string
+
+	MetricsAddr string
+	HealthAddr  string
+
+	LeaderElectResourceNamespace string
+	LeaderElect                  bool
+	LeaderElectLeaseDuration     time.Duration
+}
+
+func (f Flags) ToManagerOptions() manager.Options {
+	// Setup a Manager
+	opts := manager.Options{
+		LeaderElection:          f.LeaderElect,
+		LeaderElectionNamespace: f.LeaderElectResourceNamespace,
+		LeaderElectionID:        "cluster-api-provider-ovirt-leader",
+		LeaseDuration:           &f.LeaderElectLeaseDuration,
+		HealthProbeBindAddress:  f.HealthAddr,
+		SyncPeriod:              &syncPeriod,
+		MetricsBindAddress:      f.MetricsAddr,
+		// Slow the default retry and renew election rate to reduce etcd writes at idle: BZ 1858400
+		RetryPeriod:   &retryPeriod,
+		RenewDeadline: &renewDeadline,
+	}
+	if f.Namespace != "" {
+		opts.Namespace = f.Namespace
+		klog.Infof("Watching machine-api objects only in namespace %q for reconciliation.", opts.Namespace)
+	}
+
+	return opts
+}
+
+func parseFlags() Flags {
 	watchNamespace := flag.String(
 		"namespace",
 		"",
@@ -85,74 +193,42 @@ func main() {
 	)
 
 	flag.Parse()
-	log := logz.New().WithName("ovirt-controller-manager")
 
-	entryLog := log.WithName("entrypoint")
-
-	cfg := config.GetConfigOrDie()
-	if cfg == nil {
-		panic(fmt.Errorf("GetConfigOrDie didn't die and cfg is nil"))
+	return Flags{
+		Namespace:                    *watchNamespace,
+		MetricsAddr:                  *metricsAddr,
+		HealthAddr:                   *healthAddr,
+		LeaderElectResourceNamespace: *leaderElectResourceNamespace,
+		LeaderElect:                  *leaderElect,
+		LeaderElectLeaseDuration:     *leaderElectLeaseDuration,
 	}
+}
 
-	// Setup a Manager
-	opts := manager.Options{
-		LeaderElection:          *leaderElect,
-		LeaderElectionNamespace: *leaderElectResourceNamespace,
-		LeaderElectionID:        "cluster-api-provider-ovirt-leader",
-		LeaseDuration:           leaderElectLeaseDuration,
-		HealthProbeBindAddress:  *healthAddr,
-		SyncPeriod:              &syncPeriod,
-		MetricsBindAddress:      *metricsAddr,
-		// Slow the default retry and renew election rate to reduce etcd writes at idle: BZ 1858400
-		RetryPeriod:   &retryPeriod,
-		RenewDeadline: &renewDeadline,
-	}
-	if *watchNamespace != "" {
-		opts.Namespace = *watchNamespace
-		klog.Infof("Watching machine-api objects only in namespace %q for reconciliation.", opts.Namespace)
-	}
-
-	mgr, err := manager.New(cfg, opts)
+func setupManager(cfg *rest.Config, options manager.Options, oVirtClientService ovirt.ClientService) (manager.Manager, error) {
+	mgr, err := manager.New(cfg, options)
 	if err != nil {
-		entryLog.Error(err, "Unable to set up overall controller manager")
-		os.Exit(1)
+		return nil, err
 	}
 
 	if err := apis.AddToScheme(mgr.GetScheme()); err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	if err := configv1.Install(mgr.GetScheme()); err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	if err := machinev1.AddToScheme(mgr.GetScheme()); err != nil {
-		panic(err)
+		return nil, err
 	}
-
-	machineActuator := machine.NewActuator(machine.ActuatorParams{
-		Namespace:          *watchNamespace,
-		Client:             mgr.GetClient(),
-		Scheme:             mgr.GetScheme(),
-		EventRecorder:      mgr.GetEventRecorderFor("ovirtprovider"),
-		OVirtClientFactory: ovirt.NewOvirtClientFactory(mgr.GetClient(), ovirt.CreateNewOVirtClient),
-	})
-
-	capimachine.AddWithActuator(mgr, machineActuator)
-
-	controller.NewProviderIDController(mgr.GetClient()).AddToManager(mgr)
-	controller.NewNodeController(mgr.GetClient()).AddToManager(mgr)
 
 	if err := mgr.AddReadyzCheck("ping", healthz.Ping); err != nil {
-		klog.Fatal(err)
+		return nil, fmt.Errorf("failed to add ready check to controller manager: %v", err)
 	}
 
-	if err := mgr.AddHealthzCheck("ping", healthz.Ping); err != nil {
-		klog.Fatal(err)
+	if err := mgr.AddHealthzCheck("ping", healthCheck(oVirtClientService.NewCachedClient("healthz"))); err != nil {
+		return nil, fmt.Errorf("failed to add health check to controller manager: %v", err)
 	}
 
-	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
-		entryLog.Error(err, "unable to run manager")
-		os.Exit(1)
-	}
+	return mgr, nil
 }

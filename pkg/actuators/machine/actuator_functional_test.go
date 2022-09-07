@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/go-cmp/cmp"
 	machinev1 "github.com/openshift/api/machine/v1beta1"
 	ovirtclientlog "github.com/ovirt/go-ovirt-client-log/v3"
 	ovirtclient "github.com/ovirt/go-ovirt-client/v2"
@@ -42,7 +43,9 @@ func TestActuator(t *testing.T) {
 	k8sComponentCleanup := setupK8sComponents(t, k8sClient, namespace)
 	defer k8sComponentCleanup()
 
-	ctx := context.Background()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
+
 	testcases := []struct {
 		name string
 
@@ -190,15 +193,26 @@ func TestActuator(t *testing.T) {
 				t.Fatalf("Unexpected error occurred while waiting for machine to be synced")
 			}
 
-			newActuator := actuator.NewActuator(actuator.ActuatorParams{
-				Client:    k8sClient,
-				Namespace: namespace,
-				Scheme:    scheme.Scheme,
-				OVirtClientFactory: ovirt.NewOvirtClientFactory(k8sClient, func(creds *ovirt.Credentials) (ovirtclient.Client, error) {
-					return helper.GetClient(), nil
-				}),
-				EventRecorder: mgr.GetEventRecorderFor("ovirtprovider"),
+			oVirtClientService := ovirt.NewClientService(cfg, ovirt.SecretsToWatch{
+				Namespace:  namespace,
+				SecretName: "ovirt-credentials",
 			})
+			cachedOVirtClient := oVirtClientService.NewCachedClient("actuator")
+			// use custom create func to use the mock client
+			cachedOVirtClient.WithCreateFunc(
+				func(creds *ovirt.Credentials) (ovirtclient.Client, error) {
+					return helper.GetClient(), nil
+				})
+
+			newActuator := actuator.NewActuator(actuator.ActuatorParams{
+				Client:            k8sClient,
+				Namespace:         namespace,
+				Scheme:            scheme.Scheme,
+				CachedOVirtClient: cachedOVirtClient,
+				EventRecorder:     mgr.GetEventRecorderFor("ovirtprovider"),
+			})
+
+			oVirtClientService.Run(ctx)
 
 			testcase.execute(newActuator, machine)
 
@@ -370,22 +384,6 @@ func basicOVirtSpec(templateName string, clusterID string) *capoV1Beta1.OvirtMac
 	}
 }
 
-// failingOVirtClient embeds ovirtclient.Client from the TestHelper and redefines Test()
-// to always fail, thereby simulating a credentials change
-type failingOVirtClient struct {
-	ovirtclient.Client
-}
-
-func (mc failingOVirtClient) Test(retries ...ovirtclient.RetryStrategy) error {
-	return fmt.Errorf("Ups, I did it again")
-}
-
-func newFailingOVirtClient(helper ovirtclient.TestHelper) failingOVirtClient {
-	return failingOVirtClient{
-		Client: helper.GetClient(),
-	}
-}
-
 func TestActuatorCredentialsUpdate(t *testing.T) {
 	cfg, stopEnv := setupTestEnv(t)
 	defer stopEnv()
@@ -403,7 +401,8 @@ func TestActuatorCredentialsUpdate(t *testing.T) {
 		t.Fatalf("Unexpected error occurred setting up test helper: %v", err)
 	}
 
-	ctx := context.Background()
+	ctx, ctxCancel := context.WithCancel(context.Background())
+	defer ctxCancel()
 
 	templateName := "ovirt14-vhd9b-rhcos"
 	ovirtSpec := basicOVirtSpec(templateName, string(helper.GetClusterID()))
@@ -433,17 +432,29 @@ func TestActuatorCredentialsUpdate(t *testing.T) {
 		t.Fatalf("Unexpected error occurred while waiting for machine to be synced")
 	}
 
-	var finalCredentials *ovirt.Credentials
-	newActuator := actuator.NewActuator(actuator.ActuatorParams{
-		Client:    k8sClient,
-		Namespace: namespace,
-		Scheme:    scheme.Scheme,
-		OVirtClientFactory: ovirt.NewOvirtClientFactory(k8sClient, func(creds *ovirt.Credentials) (ovirtclient.Client, error) {
-			finalCredentials = creds
-			return newFailingOVirtClient(helper), nil
-		}),
-		EventRecorder: mgr.GetEventRecorderFor("ovirtprovider"),
+	oVirtClientService := ovirt.NewClientService(cfg, ovirt.SecretsToWatch{
+		Namespace:  namespace,
+		SecretName: "ovirt-credentials",
 	})
+	// declare final credentials which the updater is expected to set on an secret update
+	var finalActuatorCredentials *ovirt.Credentials
+	cachedOVirtClient := oVirtClientService.NewCachedClient("actuator")
+	cachedOVirtClient.WithCreateFunc(
+		func(creds *ovirt.Credentials) (ovirtclient.Client, error) {
+			finalActuatorCredentials = creds
+			return helper.GetClient(), nil
+		},
+	)
+
+	newActuator := actuator.NewActuator(actuator.ActuatorParams{
+		Client:            k8sClient,
+		Namespace:         namespace,
+		Scheme:            scheme.Scheme,
+		CachedOVirtClient: cachedOVirtClient,
+		EventRecorder:     mgr.GetEventRecorderFor("ovirtprovider"),
+	})
+
+	oVirtClientService.Run(ctx)
 
 	// execute the actuator the first time
 	err = newActuator.Create(ctx, machine)
@@ -479,14 +490,12 @@ func TestActuatorCredentialsUpdate(t *testing.T) {
 		t.Fatalf("Unexpected error occurred while calling actuator create: %v", err)
 	}
 
-	if finalCredentials == nil {
-		t.Fatal("oVirtClientFactory hase never been called")
+	expectedCreds, err := ovirt.FromK8sSecret(ovirtCredentials)
+	if err != nil {
+		t.Fatalf("Unexpected error occurred while parsing secret: %v", err)
 	}
 
-	if finalCredentials.Username != newOVirtUser || finalCredentials.Password != newOVirtPassword {
-		t.Fatalf("Expected updated credentials to be ('%s', '%s'), but got ('%s', '%s')",
-			newOVirtUser, newOVirtPassword,
-			finalCredentials.Username, finalCredentials.Password,
-		)
+	if diff := cmp.Diff(finalActuatorCredentials, expectedCreds); diff != "" {
+		t.Errorf("Actuator: Detected difference in expected and final credentials: %s", diff)
 	}
 }

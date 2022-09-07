@@ -118,9 +118,6 @@ func validateHugepages(value int32) error {
 // validateGuaranteedMemory execute validation regarding the Virtual Machine validateGuaranteedMemory
 // Returns: nil or error
 func validateGuaranteedMemory(config *ovirtconfigv1.OvirtMachineProviderSpec) error {
-	if config.MemoryMB == 0 {
-		return fmt.Errorf("MemoryMB must be specified")
-	}
 	if config.GuaranteedMemoryMB > config.MemoryMB {
 		return fmt.Errorf("GuaranteedMemoryMB (%d) cannot be bigger then  MemoryMB (%d)",
 			config.GuaranteedMemoryMB,

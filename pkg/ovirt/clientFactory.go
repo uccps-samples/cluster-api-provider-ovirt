@@ -20,7 +20,7 @@ type oVirtClientFactory struct {
 	k8sClient client.Client
 }
 
-type CreateOVirtClientFunc func(creds *Creds) (ovirtclient.Client, error)
+type CreateOVirtClientFunc func(creds *Credentials) (ovirtclient.Client, error)
 
 func NewOvirtClientFactory(k8sClient client.Client, create CreateOVirtClientFunc) *oVirtClientFactory {
 	return &oVirtClientFactory{
@@ -50,7 +50,7 @@ func (factory *oVirtClientFactory) isConnected() bool {
 	return factory.oVirtClient != nil && factory.oVirtClient.Test() == nil
 }
 
-func (factory *oVirtClientFactory) fetchCredentials() (*Creds, error) {
+func (factory *oVirtClientFactory) fetchCredentials() (*Credentials, error) {
 	creds, err := getCredentialsSecret(factory.k8sClient, utils.NAMESPACE, utils.OvirtCloudCredsSecretName)
 	if err != nil {
 		return nil, fmt.Errorf("failed getting credentials for namespace %s, %w", utils.NAMESPACE, err)
@@ -58,7 +58,7 @@ func (factory *oVirtClientFactory) fetchCredentials() (*Creds, error) {
 	return creds, nil
 }
 
-func CreateNewOVirtClient(creds *Creds) (ovirtclient.Client, error) {
+func CreateNewOVirtClient(creds *Credentials) (ovirtclient.Client, error) {
 	tls := ovirtclient.TLS()
 	if creds.Insecure {
 		tls.Insecure()

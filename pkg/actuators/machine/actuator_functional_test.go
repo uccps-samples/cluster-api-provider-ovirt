@@ -194,7 +194,7 @@ func TestActuator(t *testing.T) {
 				Client:    k8sClient,
 				Namespace: namespace,
 				Scheme:    scheme.Scheme,
-				OVirtClientFactory: ovirt.NewOvirtClientFactory(k8sClient, func(creds *ovirt.Creds) (ovirtclient.Client, error) {
+				OVirtClientFactory: ovirt.NewOvirtClientFactory(k8sClient, func(creds *ovirt.Credentials) (ovirtclient.Client, error) {
 					return helper.GetClient(), nil
 				}),
 				EventRecorder: mgr.GetEventRecorderFor("ovirtprovider"),
@@ -433,12 +433,12 @@ func TestActuatorCredentialsUpdate(t *testing.T) {
 		t.Fatalf("Unexpected error occurred while waiting for machine to be synced")
 	}
 
-	var finalCredentials *ovirt.Creds
+	var finalCredentials *ovirt.Credentials
 	newActuator := actuator.NewActuator(actuator.ActuatorParams{
 		Client:    k8sClient,
 		Namespace: namespace,
 		Scheme:    scheme.Scheme,
-		OVirtClientFactory: ovirt.NewOvirtClientFactory(k8sClient, func(creds *ovirt.Creds) (ovirtclient.Client, error) {
+		OVirtClientFactory: ovirt.NewOvirtClientFactory(k8sClient, func(creds *ovirt.Credentials) (ovirtclient.Client, error) {
 			finalCredentials = creds
 			return newFailingOVirtClient(helper), nil
 		}),

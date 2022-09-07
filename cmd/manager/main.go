@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
@@ -28,6 +29,7 @@ import (
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/apis"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/controller"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/ovirt"
+	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
 	capimachine "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
@@ -130,18 +132,25 @@ func main() {
 		panic(err)
 	}
 
+	// create oVirt client service to create cached clients syncing with secrets
+	ctx, cancel := context.WithCancel(context.Background())
+	oVirtClientService := ovirt.NewClientService(cfg, ovirt.SecretsToWatch{
+		Namespace:  utils.NAMESPACE,
+		SecretName: utils.OvirtCloudCredsSecretName,
+	})
+
 	machineActuator := machine.NewActuator(machine.ActuatorParams{
-		Namespace:          *watchNamespace,
-		Client:             mgr.GetClient(),
-		Scheme:             mgr.GetScheme(),
-		EventRecorder:      mgr.GetEventRecorderFor("ovirtprovider"),
-		OVirtClientFactory: ovirt.NewOvirtClientFactory(mgr.GetClient(), ovirt.CreateNewOVirtClient),
+		Namespace:         *watchNamespace,
+		Client:            mgr.GetClient(),
+		Scheme:            mgr.GetScheme(),
+		EventRecorder:     mgr.GetEventRecorderFor("ovirtprovider"),
+		CachedOVirtClient: oVirtClientService.NewCachedClient("actuator"),
 	})
 
 	capimachine.AddWithActuator(mgr, machineActuator)
 
-	controller.NewProviderIDController(mgr.GetClient()).AddToManager(mgr)
-	controller.NewNodeController(mgr.GetClient()).AddToManager(mgr)
+	controller.NewProviderIDController(mgr.GetClient(), oVirtClientService.NewCachedClient("providerID")).AddToManager(mgr)
+	controller.NewNodeController(mgr.GetClient(), oVirtClientService.NewCachedClient("node")).AddToManager(mgr)
 
 	if err := mgr.AddReadyzCheck("ping", healthz.Ping); err != nil {
 		klog.Fatal(err)
@@ -151,7 +160,16 @@ func main() {
 		klog.Fatal(err)
 	}
 
-	if err := mgr.Start(signals.SetupSignalHandler()); err != nil {
+	// start the service to receive secret updates and immediately return
+	oVirtClientService.Run(ctx)
+
+	err = mgr.Start(signals.SetupSignalHandler())
+
+	// shutdown oVirt client service
+	cancel()
+	oVirtClientService.Shutdown(3 * time.Second)
+
+	if err != nil {
 		entryLog.Error(err, "unable to run manager")
 		os.Exit(1)
 	}

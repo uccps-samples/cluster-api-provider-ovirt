@@ -4,5 +4,6 @@ approvers:
   - mmartinv
   - bkhizgiy
   - engelmi
+  - Darth-Mera
 component: "Cloud Compute"
 subcomponent: "oVirt Provider"

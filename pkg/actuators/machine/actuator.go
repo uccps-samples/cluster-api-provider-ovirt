@@ -23,31 +23,31 @@ import (
 
 // ActuatorParams is the data structure that contains the parameters required to set up a new Actuator.
 type ActuatorParams struct {
-	Namespace          string
-	Client             client.Client
-	Scheme             *runtime.Scheme
-	MachinesClient     v1beta1.MachineV1beta1Interface
-	EventRecorder      record.EventRecorder
-	OVirtClientFactory ovirt.OVirtClientFactory
+	Namespace         string
+	Client            client.Client
+	Scheme            *runtime.Scheme
+	MachinesClient    v1beta1.MachineV1beta1Interface
+	EventRecorder     record.EventRecorder
+	CachedOVirtClient ovirt.CachedOVirtClient
 }
 
 // OvirtActuator is responsible for performing machine reconciliation on oVirt platform.
 type OvirtActuator struct {
-	params             ActuatorParams
-	scheme             *runtime.Scheme
-	client             client.Client
-	eventRecorder      record.EventRecorder
-	ovirtClientFactory ovirt.OVirtClientFactory
+	params            ActuatorParams
+	scheme            *runtime.Scheme
+	client            client.Client
+	eventRecorder     record.EventRecorder
+	cachedOVirtClient ovirt.CachedOVirtClient
 }
 
 // NewActuator returns an Ovirt Actuator.
 func NewActuator(params ActuatorParams) *OvirtActuator {
 	return &OvirtActuator{
-		params:             params,
-		client:             params.Client,
-		scheme:             params.Scheme,
-		eventRecorder:      params.EventRecorder,
-		ovirtClientFactory: params.OVirtClientFactory,
+		params:            params,
+		client:            params.Client,
+		scheme:            params.Scheme,
+		eventRecorder:     params.EventRecorder,
+		cachedOVirtClient: params.CachedOVirtClient,
 	}
 }
 
@@ -61,7 +61,7 @@ func (actuator *OvirtActuator) Create(ctx context.Context, machine *machinev1.Ma
 			"cannot unmarshal machineProviderSpec field: %v", err))
 	}
 
-	ovirtClient, err := actuator.ovirtClientFactory.GetOVirtClient()
+	ovirtClient, err := actuator.cachedOVirtClient.Get()
 	if err != nil {
 		return actuator.handleMachineError(machine, "Create", apierrors.InvalidMachineConfiguration(
 			"failed to create connection to oVirt API: %v", err))
@@ -99,7 +99,7 @@ func (actuator *OvirtActuator) Update(ctx context.Context, machine *machinev1.Ma
 			"cannot unmarshal machineProviderSpec field: %v", err))
 	}
 
-	ovirtClient, err := actuator.ovirtClientFactory.GetOVirtClient()
+	ovirtClient, err := actuator.cachedOVirtClient.Get()
 	if err != nil {
 		return actuator.handleMachineError(machine, "Update", apierrors.UpdateMachine(
 			"failed to create connection to oVirt API %v", err))
@@ -126,7 +126,7 @@ func (actuator *OvirtActuator) Update(ctx context.Context, machine *machinev1.Ma
 func (actuator *OvirtActuator) Exists(ctx context.Context, machine *machinev1.Machine) (bool, error) {
 	klog.Infof("Checking machine %v exists.\n", machine.Name)
 
-	ovirtClient, err := actuator.ovirtClientFactory.GetOVirtClient()
+	ovirtClient, err := actuator.cachedOVirtClient.Get()
 	if err != nil {
 		return false, actuator.handleMachineError(machine, "Exists", apierrors.InvalidMachineConfiguration(
 			"failed to create connection to oVirt API: %v", err))
@@ -140,7 +140,7 @@ func (actuator *OvirtActuator) Exists(ctx context.Context, machine *machinev1.Ma
 func (actuator *OvirtActuator) Delete(ctx context.Context, machine *machinev1.Machine) error {
 	klog.Infof("Deleting machine %v.\n", machine.Name)
 
-	ovirtClient, err := actuator.ovirtClientFactory.GetOVirtClient()
+	ovirtClient, err := actuator.cachedOVirtClient.Get()
 	if err != nil {
 		return actuator.handleMachineError(machine, "Delete", apierrors.InvalidMachineConfiguration(
 			"failed to create connection to oVirt API: %v", err))

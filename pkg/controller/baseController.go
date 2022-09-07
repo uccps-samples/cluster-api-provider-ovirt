@@ -14,13 +14,13 @@ type baseController struct {
 	Name string
 	Log  logr.Logger
 
-	Client             client.Client
-	OVirtClientFactory ovirt.OVirtClientFactory
+	Client            client.Client
+	CachedOVirtClient ovirt.CachedOVirtClient
 }
 
 // GetoVirtClient returns a client to oVirt's API endpoint
 func (b *baseController) GetoVirtClient() (ovirtclient.Client, error) {
-	return b.OVirtClientFactory.GetOVirtClient()
+	return b.CachedOVirtClient.Get()
 }
 
 const requeueDefaultTime = 30 * time.Second

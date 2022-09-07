@@ -27,7 +27,7 @@ type providerIDController struct {
 }
 
 // Creates a new ProviderID Controller.
-func NewProviderIDController(k8sClient client.Client) *providerIDController {
+func NewProviderIDController(k8sClient client.Client, cachedOVirtClient ovirt.CachedOVirtClient) *providerIDController {
 	log.SetLogger(klogr.New())
 	ctrlName := "ProviderIDController"
 
@@ -36,8 +36,8 @@ func NewProviderIDController(k8sClient client.Client) *providerIDController {
 			Name: ctrlName,
 			Log:  log.Log.WithName("controllers").WithName(ctrlName),
 
-			Client:             k8sClient,
-			OVirtClientFactory: ovirt.NewOvirtClientFactory(k8sClient, ovirt.CreateNewOVirtClient),
+			Client:            k8sClient,
+			CachedOVirtClient: cachedOVirtClient,
 		},
 	}
 }

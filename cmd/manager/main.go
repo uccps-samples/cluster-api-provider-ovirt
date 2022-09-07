@@ -20,6 +20,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"net/http"
 	"os"
 	"time"
 
@@ -32,6 +33,7 @@ import (
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
 	capimachine "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	"k8s.io/klog"
+	"k8s.io/klog/v2/klogr"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	logz "sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -156,7 +158,7 @@ func main() {
 		klog.Fatal(err)
 	}
 
-	if err := mgr.AddHealthzCheck("ping", healthz.Ping); err != nil {
+	if err := mgr.AddHealthzCheck("ping", healthCheck(oVirtClientService.NewCachedClient("healthz"))); err != nil {
 		klog.Fatal(err)
 	}
 
@@ -172,5 +174,26 @@ func main() {
 	if err != nil {
 		entryLog.Error(err, "unable to run manager")
 		os.Exit(1)
+	}
+}
+
+func healthCheck(cachedOVirtClient ovirt.CachedOVirtClient) func(*http.Request) error {
+	return func(req *http.Request) error {
+		logger := klogr.New().WithName("HealthzCheck").V(4)
+		logger.Info("starting healthz check...")
+
+		client, err := cachedOVirtClient.Get()
+		if err != nil {
+			logger.Error(err, "failed to get ovirt client")
+			return err
+		}
+		err = client.Test()
+		if err != nil {
+			logger.Error(err, "ovirt client connection test failed")
+			return err
+		}
+		logger.Info("finished healthz check")
+
+		return nil
 	}
 }

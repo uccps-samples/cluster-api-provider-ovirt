@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
-	kloglogger "github.com/ovirt/go-ovirt-client-log-klog/v2"
 	ovirtclient "github.com/ovirt/go-ovirt-client/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -19,8 +18,6 @@ type oVirtClientFactory struct {
 
 	k8sClient client.Client
 }
-
-type CreateOVirtClientFunc func(creds *Credentials) (ovirtclient.Client, error)
 
 func NewOvirtClientFactory(k8sClient client.Client, create CreateOVirtClientFunc) *oVirtClientFactory {
 	return &oVirtClientFactory{
@@ -56,27 +53,4 @@ func (factory *oVirtClientFactory) fetchCredentials() (*Credentials, error) {
 		return nil, fmt.Errorf("failed getting credentials for namespace %s, %w", utils.NAMESPACE, err)
 	}
 	return creds, nil
-}
-
-func CreateNewOVirtClient(creds *Credentials) (ovirtclient.Client, error) {
-	tls := ovirtclient.TLS()
-	if creds.Insecure {
-		tls.Insecure()
-	} else {
-		if creds.CAFile != "" {
-			tls.CACertsFromFile(creds.CAFile)
-		}
-		if creds.CABundle != "" {
-			tls.CACertsFromMemory([]byte(creds.CABundle))
-		}
-		tls.CACertsFromSystem()
-	}
-	return ovirtclient.New(
-		creds.URL,
-		creds.Username,
-		creds.Password,
-		tls,
-		kloglogger.New(),
-		nil,
-	)
 }

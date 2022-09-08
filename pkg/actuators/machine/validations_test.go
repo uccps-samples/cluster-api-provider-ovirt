@@ -71,8 +71,6 @@ func TestValidateMachine(t *testing.T) {
 			expectIsValid: false,
 		},
 		{
-			// This test now fails due to duplicate check of MemoryMB == 0 that happens in validateGuaranteedMemory func
-			// in validations.go, setting expectIsValid: false instead of true before it's fixed
 			name: "validation of machine provider spec with only instance type ID succeeds",
 			spec: BasicValidSpec(func(omps *v1beta1.OvirtMachineProviderSpec) *v1beta1.OvirtMachineProviderSpec {
 				omps.CPU = nil
@@ -80,7 +78,7 @@ func TestValidateMachine(t *testing.T) {
 				omps.InstanceTypeId = "Metal"
 				return omps
 			}),
-			expectIsValid: false,
+			expectIsValid: true,
 		},
 		{
 			name: "validation of machine provider spec without MemoryMB fails",

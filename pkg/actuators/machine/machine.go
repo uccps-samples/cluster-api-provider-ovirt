@@ -10,11 +10,11 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	machinev1 "github.com/openshift/api/machine/v1beta1"
 	ovirtconfigv1 "github.com/openshift/cluster-api-provider-ovirt/pkg/apis/ovirtprovider/v1beta1"
+	"github.com/openshift/cluster-api-provider-ovirt/pkg/ovirt"
 	"github.com/openshift/cluster-api-provider-ovirt/pkg/utils"
 	ovirtC "github.com/ovirt/go-ovirt-client/v2"
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -28,6 +28,7 @@ const (
 
 type machineScope struct {
 	context.Context
+	logger      *ovirt.KLogr
 	ovirtClient ovirtC.Client
 	client      client.Client
 	machine     *machinev1.Machine
@@ -46,6 +47,7 @@ func newMachineScope(
 
 	return &machineScope{
 		Context:                    ctx,
+		logger:                     ovirt.NewKLogr("machine-scope").WithVInfo(0),
 		ovirtClient:                ovirtClient,
 		client:                     c,
 		machine:                    machine,
@@ -66,7 +68,7 @@ func (ms *machineScope) create() error {
 		}
 	}
 	if vms != nil {
-		klog.Infof("Skipped creating a VM that already exists.\n")
+		ms.logger.Infof("Skipped creating a VM that already exists.\n")
 		return nil
 	}
 
@@ -260,7 +262,7 @@ func (ms *machineScope) create() error {
 			if err != nil {
 				return errors.Wrapf(err, "failed to extend disk %s", disk.ID())
 			}
-			klog.Infof("waiting for disk to become OK...")
+			ms.logger.Infof("waiting for disk to become OK...")
 			updatedDisk, err = updatedDisk.WaitForOK()
 			if err != nil {
 				return err
@@ -413,19 +415,19 @@ func (ms *machineScope) patchMachine(ctx context.Context) error {
 	// Copy the status, because its discarded and returned fresh from the DB by the machine resource update.
 	// Save it for the status sub-resource update.
 	statusCopy := *ms.machine.Status.DeepCopy()
-	klog.Info("Updating machine resource")
+	ms.logger.Infof("Updating machine resource")
 
 	if err := ms.client.Patch(ctx, ms.machine, ms.originalMachineToBePatched); err != nil {
-		klog.Errorf("Failed to patch machine %q: %v", ms.machine.GetName(), err)
+		ms.logger.Errorf("Failed to patch machine %q: %v", ms.machine.GetName(), err)
 		return err
 	}
 
 	ms.machine.Status = statusCopy
 
 	// patch status
-	klog.Info("Updating machine status sub-resource")
+	ms.logger.Infof("Updating machine status sub-resource")
 	if err := ms.client.Status().Patch(ctx, ms.machine, ms.originalMachineToBePatched); err != nil {
-		klog.Errorf("Failed to patch machine status %q: %v", ms.machine.GetName(), err)
+		ms.logger.Errorf("Failed to patch machine status %q: %v", ms.machine.GetName(), err)
 		return err
 	}
 	return nil
@@ -449,7 +451,7 @@ func (ms *machineScope) reconcileMachineNetwork(ctx context.Context, status ovir
 		return fmt.Errorf("requeuing reconciliation, VM %s state is %s", name, status)
 	}
 	addresses := []corev1.NodeAddress{{Address: name, Type: corev1.NodeInternalDNS}}
-	klog.V(5).Infof("using oVirt SDK to find %s IP addresses", name)
+	ms.logger.Debugf("using oVirt SDK to find %s IP addresses", name)
 
 	// get API and ingress addresses that will be excluded from the node address selection
 	excludeAddr, err := ms.getClusterAddress(ctx)
@@ -461,18 +463,18 @@ func (ms *machineScope) reconcileMachineNetwork(ctx context.Context, status ovir
 
 	if err != nil {
 		// stop reconciliation till we get IP addresses - otherwise the state will be considered stable.
-		klog.Errorf("failed to lookup the VM IP %s - skip setting addresses for this machine", err)
+		ms.logger.Errorf("failed to lookup the VM IP %s - skip setting addresses for this machine", err)
 		return errors.Wrap(
 			err, "failed to lookup the VM IP - skip setting addresses for this machine")
 	}
 
 	if err != nil {
 		// stop reconciliation till we get IP addresses - otherwise the state will be considered stable.
-		klog.Errorf("failed to lookup the VM IP %s - skip setting addresses for this machine", err)
+		ms.logger.Errorf("failed to lookup the VM IP %s - skip setting addresses for this machine", err)
 		return errors.Wrap(
 			err, "failed to lookup the VM IP - skip setting addresses for this machine")
 	}
-	klog.V(5).Infof("received IP address %v from engine", ip)
+	ms.logger.Debugf("received IP address %v from engine", ip)
 	addresses = append(addresses, corev1.NodeAddress{Type: corev1.NodeInternalIP, Address: ip})
 	ms.machine.Status.Addresses = addresses
 	return nil

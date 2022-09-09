@@ -4,10 +4,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/go-logr/logr"
 	ovirtclient "github.com/ovirt/go-ovirt-client/v2"
-	"k8s.io/klog/v2/klogr"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type CachedOVirtClient interface {
@@ -16,7 +13,8 @@ type CachedOVirtClient interface {
 }
 
 type cachedOVirtClient struct {
-	logger logr.Logger
+	logger *KLogr
+	name   string
 
 	credentials      *Credentials
 	client           ovirtclient.Client
@@ -25,10 +23,9 @@ type cachedOVirtClient struct {
 }
 
 func NewCachedOVirtClient(name string) *cachedOVirtClient {
-	log.SetLogger(klogr.New())
-
 	return &cachedOVirtClient{
-		logger: log.Log.WithName(fmt.Sprintf("cached-client-%s", name)).V(3),
+		logger: NewKLogr("cached-cient", name).WithVInfo(0),
+		name:   name,
 
 		credentials:      nil,
 		client:           nil,
@@ -45,7 +42,7 @@ func (cachedClient *cachedOVirtClient) SetCredentials(newCredentials *Credential
 	cachedClient.updateLock.Lock()
 	defer cachedClient.updateLock.Unlock()
 
-	cachedClient.logger.Info("Updating cached oVirt client credentials")
+	cachedClient.logger.Infof("Updating cached oVirt client credentials")
 	cachedClient.credentials = newCredentials
 	cachedClient.buildClient()
 }
@@ -55,7 +52,8 @@ func (cachedClient *cachedOVirtClient) buildClient() error {
 		cachedClient.clientCreateFunc = CreateNewOVirtClient
 	}
 
-	newClient, err := cachedClient.clientCreateFunc(cachedClient.credentials)
+	newClient, err := cachedClient.clientCreateFunc(cachedClient.credentials, NewKLogr("cached-client", cachedClient.name, "ovirt"))
+	newClient.Test()
 	if err != nil {
 		cachedClient.client = nil // invalidate current client, will retrigger build
 		return fmt.Errorf("failed to create oVirt client: %v", err)
@@ -69,7 +67,7 @@ func (cachedClient *cachedOVirtClient) Get() (ovirtclient.Client, error) {
 	defer cachedClient.updateLock.Unlock()
 
 	if cachedClient.client == nil || cachedClient.client.Test() != nil {
-		cachedClient.logger.Info("Building new oVirt client...")
+		cachedClient.logger.Infof("Building new oVirt client...")
 		err := cachedClient.buildClient()
 		if err != nil {
 			return nil, err

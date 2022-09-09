@@ -34,7 +34,6 @@ import (
 	capimachine "github.com/openshift/machine-api-operator/pkg/controller/machine"
 	"k8s.io/client-go/rest"
 	"k8s.io/klog"
-	"k8s.io/klog/v2/klogr"
 	"sigs.k8s.io/controller-runtime/pkg/client/config"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	logz "sigs.k8s.io/controller-runtime/pkg/log/zap"
@@ -51,11 +50,6 @@ var (
 )
 
 func main() {
-	klog.InitFlags(nil)
-
-	log := logz.New().WithName("ovirt-controller-manager")
-	entryLog := log.WithName("entrypoint")
-
 	cfg := config.GetConfigOrDie()
 	if cfg == nil {
 		panic(fmt.Errorf("GetConfigOrDie didn't die and cfg is nil"))
@@ -69,6 +63,9 @@ func main() {
 	})
 
 	flags := parseFlags()
+
+	log := logz.New().WithName("ovirt-controller-manager")
+	entryLog := log.WithName("entrypoint")
 
 	mgr, err := setupManager(cfg, flags.ToManagerOptions(), oVirtClientService)
 	if err != nil {
@@ -103,20 +100,20 @@ func main() {
 
 func healthCheck(cachedOVirtClient ovirt.CachedOVirtClient) func(*http.Request) error {
 	return func(req *http.Request) error {
-		logger := klogr.New().WithName("HealthzCheck").V(4)
-		logger.Info("starting healthz check...")
+		logger := ovirt.NewKLogr("HealthzCheck")
+		logger.Infof("starting healthz check...")
 
 		client, err := cachedOVirtClient.Get()
 		if err != nil {
-			logger.Error(err, "failed to get ovirt client")
+			logger.Errorf("failed to get ovirt client: %v", err)
 			return err
 		}
 		err = client.Test()
 		if err != nil {
-			logger.Error(err, "ovirt client connection test failed")
+			logger.Errorf("ovirt client connection test failed: %v", err)
 			return err
 		}
-		logger.Info("finished healthz check")
+		logger.Infof("finished healthz check")
 
 		return nil
 	}
@@ -156,6 +153,8 @@ func (f Flags) ToManagerOptions() manager.Options {
 }
 
 func parseFlags() Flags {
+	klog.InitFlags(nil)
+
 	watchNamespace := flag.String(
 		"namespace",
 		"",

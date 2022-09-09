@@ -11,11 +11,9 @@ import (
 	"github.com/pkg/errors"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/klog/v2/klogr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 	"sigs.k8s.io/controller-runtime/pkg/source"
@@ -33,17 +31,8 @@ type nodeController struct {
 
 // Creates a new Node Controller.
 func NewNodeController(k8sClient client.Client, cachedOVirtClient ovirt.CachedOVirtClient) *nodeController {
-	log.SetLogger(klogr.New())
-	ctrlName := "NodeController"
-
 	return &nodeController{
-		baseController: baseController{
-			Name: ctrlName,
-			Log:  log.Log.WithName("controllers").WithName(ctrlName),
-
-			Client:            k8sClient,
-			CachedOVirtClient: cachedOVirtClient,
-		},
+		baseController: NewBaseController("NodeController", k8sClient, cachedOVirtClient),
 	}
 }
 
@@ -66,7 +55,7 @@ func (ctrl *nodeController) AddToManager(mgr manager.Manager) error {
 
 // Reconcile implements controller runtime Reconciler interface.
 func (r *nodeController) Reconcile(ctx context.Context, request reconcile.Request) (reconcile.Result, error) {
-	r.Log.Info("NodeController, Reconciling:", "Node", request.NamespacedName)
+	r.Log.Infof("Reconciling node %s", request.NamespacedName)
 	// Fetch the Node instance
 	node := corev1.Node{}
 	err := r.Client.Get(ctx, request.NamespacedName, &node)
@@ -93,9 +82,7 @@ func (r *nodeController) Reconcile(ctx context.Context, request reconcile.Reques
 	vm, err := ovirtClient.GetVMByName(node.Name)
 	if err != nil {
 		if ovirtC.HasErrorCode(err, ovirtC.ENotFound) {
-			r.Log.Info(
-				"Deleting Node from cluster since it has been removed from the oVirt engine",
-				"Node", node.Name)
+			r.Log.Infof("Deleting Node %s from cluster since it has been removed from the oVirt engine", node.Name)
 			if err := r.Client.Delete(ctx, &node); err != nil {
 				return ResultRequeueDefault(), fmt.Errorf("error deleting node: %v, error: %w", node.Name, err)
 			}
@@ -103,8 +90,7 @@ func (r *nodeController) Reconcile(ctx context.Context, request reconcile.Reques
 		return ResultRequeueDefault(),
 			fmt.Errorf("failed getting VM %s from oVirt, requeue: %w", node.Name, err)
 	} else if vm.Status() == ovirtC.VMStatusDown {
-		r.Log.Info("Node VM status is Down, requeuing for 1 min",
-			"Node", node.Name, "Vm Status", ovirtC.VMStatusDown)
+		r.Log.Infof("Node %s VM status is Down, requeuing for 1 min", node.Name)
 		return ResultRequeueAfter(retryIntervalVMDownSec), nil
 	}
 	return ResultNoRequeue(), nil

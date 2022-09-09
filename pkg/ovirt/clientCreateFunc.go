@@ -3,13 +3,12 @@ package ovirt
 import (
 	"fmt"
 
-	kloglogger "github.com/ovirt/go-ovirt-client-log-klog/v2"
 	ovirtclient "github.com/ovirt/go-ovirt-client/v2"
 )
 
-type CreateOVirtClientFunc func(creds *Credentials) (ovirtclient.Client, error)
+type CreateOVirtClientFunc func(creds *Credentials, logger *KLogr) (ovirtclient.Client, error)
 
-var CreateNewOVirtClient = func(creds *Credentials) (ovirtclient.Client, error) {
+var CreateNewOVirtClient = func(creds *Credentials, logger *KLogr) (ovirtclient.Client, error) {
 	if creds == nil {
 		return nil, fmt.Errorf("credentials are emtpy")
 	}
@@ -32,7 +31,7 @@ var CreateNewOVirtClient = func(creds *Credentials) (ovirtclient.Client, error) 
 		creds.Username,
 		creds.Password,
 		tls,
-		kloglogger.New(),
+		logger,
 		nil,
 		nil,
 	)

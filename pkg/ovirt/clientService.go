@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/go-logr/logr"
 	k8sCorev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -14,8 +13,6 @@ import (
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/cache"
-	"k8s.io/klog/v2/klogr"
-	"sigs.k8s.io/controller-runtime/pkg/log"
 )
 
 type ClientService interface {
@@ -28,7 +25,7 @@ type ClientService interface {
 }
 
 type clientService struct {
-	logger logr.Logger
+	logger *KLogr
 
 	secretInformer       cache.SharedIndexInformer
 	credentialUpdateChan chan interface{}
@@ -57,9 +54,8 @@ func NewClientService(
 		}),
 	)
 
-	log.SetLogger(klogr.New())
 	service := &clientService{
-		logger: log.Log.WithName("ovirt-client-service").V(3),
+		logger: NewKLogr("ovirt-client-service").WithVInfo(0),
 
 		secretInformer:       informersForNamespace.Core().V1().Secrets().Informer(),
 		credentialUpdateChan: make(chan interface{}),
@@ -103,7 +99,7 @@ func (service *clientService) AddListeners(updatables ...CredentialUpdatable) Cl
 func (service *clientService) Run(ctx context.Context) {
 	defer utilruntime.HandleCrash()
 
-	service.logger.Info("Starting credential update service")
+	service.logger.Infof("Starting credential update service")
 
 	service.wg.Add(1)
 	go func() {
@@ -113,9 +109,9 @@ func (service *clientService) Run(ctx context.Context) {
 	}()
 
 	if !cache.WaitForCacheSync(ctx.Done(), service.secretInformer.HasSynced) {
-		service.logger.Error(nil, "timed out waiting for informer caches to sync")
+		service.logger.Errorf("timed out waiting for informer caches to sync")
 	}
-	service.logger.Info("Credential update service synced and ready")
+	service.logger.Infof("Credential update service synced and ready")
 
 	service.wg.Add(1)
 	go service.processCredentialUpdate(ctx, service.wg)
@@ -129,19 +125,19 @@ func (service *clientService) processCredentialUpdate(ctx context.Context, wg *s
 		case credObj := <-service.credentialUpdateChan:
 			secret, ok := credObj.(*k8sCorev1.Secret)
 			if !ok {
-				service.logger.Error(nil, "failed to parse k8s secret")
+				service.logger.Errorf("failed to parse k8s secret")
 				break
 			}
 
 			creds, err := FromK8sSecret(secret)
 			if err != nil {
-				service.logger.Error(err, "failed to parse k8s secret to oVirt credentials")
+				service.logger.Errorf("failed to parse k8s secret to oVirt credentials: %v", err)
 				break
 			}
 
 			err = writeCA(creds)
 			if err != nil {
-				service.logger.Error(err, "failed to write CA to temporary file")
+				service.logger.Errorf("failed to write CA to temporary file: %v", err)
 				break
 			}
 
@@ -156,7 +152,7 @@ func (service *clientService) processCredentialUpdate(ctx context.Context, wg *s
 }
 
 func (service *clientService) Shutdown(timeout time.Duration) {
-	service.logger.Info("Shutting down oVirt client service...")
+	service.logger.Infof("Shutting down oVirt client service...")
 	c := make(chan struct{})
 	go func() {
 		defer close(c)
@@ -164,9 +160,9 @@ func (service *clientService) Shutdown(timeout time.Duration) {
 	}()
 	select {
 	case <-c:
-		service.logger.Info("oVirt client service shutdown gracefully...")
+		service.logger.Infof("oVirt client service shutdown gracefully...")
 	case <-time.After(timeout):
-		service.logger.Info(fmt.Sprintf("oVirt client service shutdown timed out at %s", timeout.String()))
+		service.logger.Infof("oVirt client service shutdown timed out at %s", timeout.String())
 	}
 }
 

@@ -4,6 +4,7 @@ package machine_test
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"path/filepath"
 	"testing"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	machinev1 "github.com/openshift/api/machine/v1beta1"
-	ovirtclientlog "github.com/ovirt/go-ovirt-client-log/v3"
 	ovirtclient "github.com/ovirt/go-ovirt-client/v2"
 	k8sCorev1 "k8s.io/api/core/v1"
 	k8sMetav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,6 +32,9 @@ func init() {
 }
 
 func TestActuator(t *testing.T) {
+	// set log verbosity to 3, increase if more info is required
+	flag.Set("v", "3")
+
 	cfg, stopEnv := setupTestEnv(t)
 	defer stopEnv()
 
@@ -159,7 +162,7 @@ func TestActuator(t *testing.T) {
 
 	for _, testcase := range testcases {
 		t.Run(testcase.name, func(t *testing.T) {
-			helper, err := ovirtclient.NewMockTestHelper(ovirtclientlog.NewTestLogger(t))
+			helper, err := ovirtclient.NewMockTestHelper(ovirt.NewKLogr("go-ovirt-client"))
 			if err != nil {
 				t.Fatalf("Unexpected error occurred setting up test helper: %v", err)
 			}
@@ -200,7 +203,7 @@ func TestActuator(t *testing.T) {
 			cachedOVirtClient := oVirtClientService.NewCachedClient("actuator")
 			// use custom create func to use the mock client
 			cachedOVirtClient.WithCreateFunc(
-				func(creds *ovirt.Credentials) (ovirtclient.Client, error) {
+				func(creds *ovirt.Credentials, logger *ovirt.KLogr) (ovirtclient.Client, error) {
 					return helper.GetClient(), nil
 				})
 
@@ -385,6 +388,9 @@ func basicOVirtSpec(templateName string, clusterID string) *capoV1Beta1.OvirtMac
 }
 
 func TestActuatorCredentialsUpdate(t *testing.T) {
+	// set log verbosity to 3, increase if more info is required
+	flag.Set("v", "3")
+
 	cfg, stopEnv := setupTestEnv(t)
 	defer stopEnv()
 
@@ -396,7 +402,7 @@ func TestActuatorCredentialsUpdate(t *testing.T) {
 	k8sComponentCleanup := setupK8sComponents(t, k8sClient, namespace)
 	defer k8sComponentCleanup()
 
-	helper, err := ovirtclient.NewMockTestHelper(ovirtclientlog.NewTestLogger(t))
+	helper, err := ovirtclient.NewMockTestHelper(ovirt.NewKLogr("go-ovirt-client"))
 	if err != nil {
 		t.Fatalf("Unexpected error occurred setting up test helper: %v", err)
 	}
@@ -440,7 +446,7 @@ func TestActuatorCredentialsUpdate(t *testing.T) {
 	var finalActuatorCredentials *ovirt.Credentials
 	cachedOVirtClient := oVirtClientService.NewCachedClient("actuator")
 	cachedOVirtClient.WithCreateFunc(
-		func(creds *ovirt.Credentials) (ovirtclient.Client, error) {
+		func(creds *ovirt.Credentials, logger *ovirt.KLogr) (ovirtclient.Client, error) {
 			finalActuatorCredentials = creds
 			return helper.GetClient(), nil
 		},

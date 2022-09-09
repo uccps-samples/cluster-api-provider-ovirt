@@ -17,7 +17,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/tools/record"
-	"k8s.io/klog"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -33,6 +32,7 @@ type ActuatorParams struct {
 
 // OvirtActuator is responsible for performing machine reconciliation on oVirt platform.
 type OvirtActuator struct {
+	logger            *ovirt.KLogr
 	params            ActuatorParams
 	scheme            *runtime.Scheme
 	client            client.Client
@@ -43,6 +43,7 @@ type OvirtActuator struct {
 // NewActuator returns an Ovirt Actuator.
 func NewActuator(params ActuatorParams) *OvirtActuator {
 	return &OvirtActuator{
+		logger:            ovirt.NewKLogr("actuator").WithVInfo(0),
 		params:            params,
 		client:            params.Client,
 		scheme:            params.Scheme,
@@ -124,7 +125,7 @@ func (actuator *OvirtActuator) Update(ctx context.Context, machine *machinev1.Ma
 // Exists determines if the given machine currently exists.
 // A machine which is not terminated is considered as existing.
 func (actuator *OvirtActuator) Exists(ctx context.Context, machine *machinev1.Machine) (bool, error) {
-	klog.Infof("Checking machine %v exists.\n", machine.Name)
+	actuator.logger.Infof("Checking machine %v exists.\n", machine.Name)
 
 	ovirtClient, err := actuator.cachedOVirtClient.Get()
 	if err != nil {
@@ -138,7 +139,7 @@ func (actuator *OvirtActuator) Exists(ctx context.Context, machine *machinev1.Ma
 
 // Delete deletes the VM from the RHV environment
 func (actuator *OvirtActuator) Delete(ctx context.Context, machine *machinev1.Machine) error {
-	klog.Infof("Deleting machine %v.\n", machine.Name)
+	actuator.logger.Infof("Deleting machine %v.\n", machine.Name)
 
 	ovirtClient, err := actuator.cachedOVirtClient.Get()
 	if err != nil {
@@ -170,6 +171,6 @@ func (actuator *OvirtActuator) handleMachineError(machine *machinev1.Machine, re
 		}
 	}
 
-	klog.Errorf("machine %s error: %v", machine.Name, err.Message)
+	actuator.logger.Errorf("machine %s error: %v", machine.Name, err.Message)
 	return err
 }

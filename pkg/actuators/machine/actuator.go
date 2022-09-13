@@ -125,7 +125,7 @@ func (actuator *OvirtActuator) Update(ctx context.Context, machine *machinev1.Ma
 // Exists determines if the given machine currently exists.
 // A machine which is not terminated is considered as existing.
 func (actuator *OvirtActuator) Exists(ctx context.Context, machine *machinev1.Machine) (bool, error) {
-	actuator.logger.Infof("Checking machine %v exists.\n", machine.Name)
+	actuator.logger.Infof("Checking machine %v exists.", machine.Name)
 
 	ovirtClient, err := actuator.cachedOVirtClient.Get()
 	if err != nil {
@@ -139,7 +139,7 @@ func (actuator *OvirtActuator) Exists(ctx context.Context, machine *machinev1.Ma
 
 // Delete deletes the VM from the RHV environment
 func (actuator *OvirtActuator) Delete(ctx context.Context, machine *machinev1.Machine) error {
-	actuator.logger.Infof("Deleting machine %v.\n", machine.Name)
+	actuator.logger.Infof("Deleting machine %v.", machine.Name)
 
 	ovirtClient, err := actuator.cachedOVirtClient.Get()
 	if err != nil {
@@ -150,7 +150,7 @@ func (actuator *OvirtActuator) Delete(ctx context.Context, machine *machinev1.Ma
 	mScope := newMachineScope(ctx, ovirtClient, actuator.client, machine, nil)
 	if err := mScope.delete(); err != nil {
 		return actuator.handleMachineError(machine, "Deleted", apierrors.UpdateMachine(
-			"error deleting Ovirt instance %v", err))
+			"error deleting oVirt instance %v", err))
 	}
 	actuator.eventRecorder.Eventf(machine, corev1.EventTypeNormal, "Deleted", "Deleted Machine %v", machine.Name)
 	return nil

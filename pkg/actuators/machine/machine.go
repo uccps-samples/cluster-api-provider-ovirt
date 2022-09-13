@@ -68,7 +68,7 @@ func (ms *machineScope) create() error {
 		}
 	}
 	if vms != nil {
-		ms.logger.Infof("Skipped creating a VM that already exists.\n")
+		ms.logger.Infof("Skipped creating a VM that already exists.")
 		return nil
 	}
 

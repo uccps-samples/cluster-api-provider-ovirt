@@ -24,7 +24,7 @@ type cachedOVirtClient struct {
 
 func NewCachedOVirtClient(name string) *cachedOVirtClient {
 	return &cachedOVirtClient{
-		logger: NewKLogr("cached-cient", name).WithVInfo(0),
+		logger: NewKLogr("cached-client", name).WithVInfo(0),
 		name:   name,
 
 		credentials:      nil,
@@ -53,7 +53,6 @@ func (cachedClient *cachedOVirtClient) buildClient() error {
 	}
 
 	newClient, err := cachedClient.clientCreateFunc(cachedClient.credentials, NewKLogr("cached-client", cachedClient.name, "ovirt"))
-	newClient.Test()
 	if err != nil {
 		cachedClient.client = nil // invalidate current client, will retrigger build
 		return fmt.Errorf("failed to create oVirt client: %v", err)

@@ -62,7 +62,7 @@ func NewKLogr(names ...string) *KLogr {
 	return &KLogr{
 		logger:   logger,
 		VDebug:   5,
-		VInfo:    3,
+		VInfo:    0,
 		VWarning: 0,
 	}
 }

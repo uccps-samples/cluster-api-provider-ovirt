@@ -50,6 +50,8 @@ var (
 )
 
 func main() {
+	flags := parseFlags()
+
 	cfg := config.GetConfigOrDie()
 	if cfg == nil {
 		panic(fmt.Errorf("GetConfigOrDie didn't die and cfg is nil"))
@@ -61,8 +63,6 @@ func main() {
 		Namespace:  utils.NAMESPACE,
 		SecretName: utils.OvirtCloudCredsSecretName,
 	})
-
-	flags := parseFlags()
 
 	log := logz.New().WithName("ovirt-controller-manager")
 	entryLog := log.WithName("entrypoint")
@@ -101,19 +101,12 @@ func main() {
 func healthCheck(cachedOVirtClient ovirt.CachedOVirtClient) func(*http.Request) error {
 	return func(req *http.Request) error {
 		logger := ovirt.NewKLogr("HealthzCheck")
-		logger.Infof("starting healthz check...")
 
-		client, err := cachedOVirtClient.Get()
+		_, err := cachedOVirtClient.Get()
 		if err != nil {
 			logger.Errorf("failed to get ovirt client: %v", err)
 			return err
 		}
-		err = client.Test()
-		if err != nil {
-			logger.Errorf("ovirt client connection test failed: %v", err)
-			return err
-		}
-		logger.Infof("finished healthz check")
 
 		return nil
 	}

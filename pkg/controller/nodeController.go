@@ -75,8 +75,9 @@ func (r *nodeController) Reconcile(ctx context.Context, request reconcile.Reques
 	}
 	ovirtClient, err := r.GetoVirtClient()
 	if err != nil {
-		return ResultRequeueDefault(),
-			errors.Wrap(err, "error getting connection to oVirt, requeue")
+		msg := "error getting connection to oVirt, requeuing"
+		r.Log.Errorf(msg+": %v", err)
+		return ResultRequeueDefault(), errors.Wrap(err, msg)
 	}
 
 	vm, err := ovirtClient.GetVMByName(node.Name)

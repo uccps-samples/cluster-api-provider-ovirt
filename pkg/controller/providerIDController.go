@@ -68,8 +68,9 @@ func (r *providerIDController) Reconcile(ctx context.Context, request reconcile.
 		r.Log.Infof("spec.ProviderID for Node %s is empty, fetching from ovirt", node.Name)
 		id, err := r.fetchOvirtVmID(node.Name)
 		if err != nil {
-			return ResultRequeueDefault(),
-				fmt.Errorf("failed getting VM %s from oVirt requeue: %w", node.Name, err)
+			errMsg := fmt.Errorf("failed getting VM %s from oVirt requeue: %w", node.Name, err)
+			r.Log.Errorf(errMsg.Error())
+			return ResultRequeueDefault(), errMsg
 		}
 		if id == "" {
 			r.Log.Infof("Node %s not found in oVirt", node.Name)

@@ -33,6 +33,6 @@ var CreateNewOVirtClient = func(creds *Credentials, logger *KLogr) (ovirtclient.
 		tls,
 		logger,
 		nil,
-		nil,
+		nil, // no verify, will be done when getting cached client
 	)
 }
